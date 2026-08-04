@@ -19,7 +19,7 @@ NPM := npm --prefix web
 
 .DEFAULT_GOAL := help
 .PHONY: help dev dev-api dev-web build run migrate test test-web fmt fmt-check \
-        vet lint check tidy web-install web-build web-clean clean db-shell
+        vet lint check tidy web-deps web-install web-build web-clean clean db-shell
 
 help: ## List the targets
 	@grep -hE '^[a-z][a-z-]*:.*?## ' $(MAKEFILE_LIST) \
@@ -33,7 +33,7 @@ dev: ## Run the API and the Vite dev server together; one Ctrl-C stops both
 dev-api: ## Run the API alone on :8080, serving JSON only
 	go run ./cmd/rental-bot -config $(CONFIG)
 
-dev-web: ## Run Vite alone on :5173, proxying the API to :8080
+dev-web: web-deps ## Run Vite alone on :5173, proxying the API to :8080
 	@$(NPM) run dev
 
 ## Build ---------------------------------------------------------------------
@@ -56,7 +56,7 @@ check: fmt-check vet lint test test-web ## Everything a commit has to pass
 test: ## Run the Go tests
 	go test ./...
 
-test-web: ## Type-check the frontend
+test-web: web-deps ## Type-check the frontend
 	@$(NPM) run typecheck
 
 fmt: ## Format the Go sources
@@ -83,8 +83,12 @@ lint: ## Run staticcheck when it is installed
 web-install: ## Install frontend dependencies from the lockfile
 	@$(NPM) ci
 
-web-build: ## Build the frontend into web/dist
+# Every frontend target depends on this, so a fresh clone works without
+# anyone having to know to run npm first.
+web-deps:
 	@[ -d web/node_modules ] || $(NPM) install
+
+web-build: web-deps ## Build the frontend into web/dist
 	@$(NPM) run build
 
 web-clean: ## Remove the built frontend
