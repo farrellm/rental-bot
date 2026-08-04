@@ -53,9 +53,12 @@ export function RecordCard({ status, error, loading }: Props) {
         ))}
       </dl>
 
-      <MigrationLog migrations={status?.migrations ?? []} />
-
-      {!loading && <Stamp state={state} at={status?.checked_at ?? new Date().toISOString()} />}
+      {/* The ledger and the stamp share the foot as flex siblings, so the
+          stamp can never land on top of an entry however narrow the card. */}
+      <footer className="card__foot">
+        <MigrationLog migrations={status?.migrations ?? []} />
+        {!loading && <Stamp state={state} at={status?.checked_at ?? new Date().toISOString()} />}
+      </footer>
     </main>
   );
 }

@@ -27,12 +27,12 @@ say so when they are missing.
 ## Quick start
 
 ```sh
-make dev        # API on :8080, Vite on :5173, hot reload
+make dev        # API on :8080, Vite on :5174, hot reload
 make build      # bin/rental-bot, with the SPA embedded
 make check      # everything a commit has to pass
 ```
 
-Then open <http://localhost:5173>.
+Then open <http://localhost:5174>.
 
 ## Make targets
 
@@ -45,7 +45,14 @@ clone; the ones that need `node_modules` install it themselves.
 | --- | --- |
 | `make dev` | Runs the API and the Vite dev server together under `-j2`. One Ctrl-C stops both. Use this for day-to-day work. |
 | `make dev-api` | The API alone on `:8080`, via `go run`. Serves JSON and the "frontend not in this binary" page. |
-| `make dev-web` | Vite alone on `:5173`, proxying `/api`, `/healthz`, and `/readyz` to `:8080`. |
+| `make dev-web` | Vite alone on `:5174`, proxying `/api`, `/healthz`, and `/readyz` to `:8080`. |
+| `make watch` | The API with live reload, via [wgo](https://github.com/bokwoon95/wgo). Restarts on `.go` and `.sql` changes — the latter because migrations are embedded, so a new one only takes effect on a rebuild. |
+| `make watch-dev` | `watch` and `dev-web` together: both halves reload. |
+
+`make watch` needs wgo (`go install github.com/bokwoon95/wgo@latest`); the
+target says so if it is missing. Editing a migration that has already been
+applied will stop the reload loop with a checksum error — that is the runner
+doing its job. Add a new `NNNN_` file instead.
 
 ### Build and run
 

@@ -103,11 +103,21 @@
 
 /* Schema ledger --------------------------------------------------------- */
 
-.ledger {
+/* The foot carries the ledger and the stamp side by side. Laying them out as
+   flex siblings rather than reserving a fixed strip for an absolutely
+   positioned stamp is what keeps them from colliding at narrow widths. */
+.card__foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--gap);
   padding: var(--gap-band);
-  /* The stamp lands in this band's right corner; the ledger keeps clear. */
-  padding-right: 15rem;
   border-top: var(--rule);
+}
+
+.ledger {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .ledger__eyebrow {
@@ -116,17 +126,21 @@
   color: var(--muted-ink);
 }
 
+/* Two columns rather than a spread, so the entries read as a ledger. The
+   columns are sized on the list and inherited by each row through subgrid,
+   which keeps the dates aligned without hard-coding a filename width. */
 .ledger__list {
+  display: grid;
+  grid-template-columns: max-content auto;
+  column-gap: var(--gap-tight);
+  row-gap: 0.4rem;
   margin-top: var(--gap-tight);
 }
 
-/* Two columns rather than a spread, so the entries read as a ledger and the
-   dates stay in one place regardless of filename length. */
 .ledger__row {
   display: grid;
-  grid-template-columns: 11rem auto;
-  gap: var(--gap-tight);
-  padding: 0.2rem 0;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   font-size: var(--size-small);
 }
 
@@ -150,11 +164,16 @@
 /* The stamp ------------------------------------------------------------- */
 
 .stamp {
-  position: absolute;
-  /* Fully on the stock: the ink multiplies into the parchment, and would
-     vanish into the petrol ground if it hung off the edge. */
-  right: 1.5rem;
-  bottom: 1.1rem;
+  position: relative;
+  /* Sits on the stock, never off it: the ink multiplies into the parchment
+     and would vanish into the petrol ground past the card's edge. */
+  flex: 0 0 auto;
+  /* Whatever inflates the type — user font scaling, Dynamic Type, a webfont
+     that never loads — the stamp stays inside the card. min-width:0 is what
+     lets the cap apply: a flex item's automatic minimum is its min-content
+     width, and "OPERATIONAL" does not break on its own. */
+  min-width: 0;
+  max-width: 100%;
 
   padding: 0.55rem 1.35rem 0.5rem;
   text-align: center;
@@ -192,6 +211,8 @@
   font-size: var(--size-stamp);
   font-weight: 700;
   line-height: 1;
+  /* Wrap rather than break out of the stamp if the cap above bites. */
+  overflow-wrap: anywhere;
 }
 
 .stamp__at {
@@ -240,21 +261,26 @@
     gap: 0.125rem;
   }
 
-  .ledger {
-    padding-right: var(--gap-band);
+  /* Not enough width for two columns, so the foot stacks and the ledger
+     entries put their date under their filename. */
+  .card__foot {
+    flex-direction: column;
+    align-items: stretch;
   }
 
+  .ledger__list,
   .ledger__row {
     grid-template-columns: 1fr;
-    gap: 0;
+    row-gap: 0;
   }
 
-  /* No corner to hang off, so the stamp lands on the card itself. */
+  .ledger__row + .ledger__row {
+    margin-top: 0.4rem;
+  }
+
   .stamp {
-    position: static;
-    display: block;
-    width: max-content;
-    margin: 0 auto var(--gap-band);
+    align-self: center;
+    margin-top: var(--gap-tight);
     transform: rotate(-3deg);
   }
 

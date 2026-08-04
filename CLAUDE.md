@@ -18,7 +18,7 @@ endpoints). Next is M1 — auth, properties and units CRUD.
 | Command | Effect |
 | --- | --- |
 | `make check` | gofmt, vet, staticcheck, Go tests, frontend type-check. **A commit has to pass this.** |
-| `make dev` | API on :8080 and Vite on :5173 together; one Ctrl-C stops both |
+| `make dev` | API on :8080 and Vite on :5174 together; one Ctrl-C stops both |
 | `make build` | Frontend, then the binary with the SPA embedded, into `bin/` |
 | `make migrate` | Apply pending migrations and exit |
 | `make test` / `make test-web` | Either half of the test suite alone |
@@ -81,6 +81,35 @@ decision, not a refactor.
   literal hex value. Numbers use `.mono` so the tabular figures line up. The
   visual language is the county record card; `web/src/styles/card.css` explains
   it.
+- **Every screen has to look and work well on both a laptop and an iPhone.**
+  This is a phone-first product in practice — approving a forwarded receipt
+  happens on the phone, not at a desk — so a screen that only holds together
+  at 1280px is not finished. See below for what that means concretely.
+
+## Laptop and iPhone, both
+
+Treat 320px (iPhone SE) through 1920px as the supported range, portrait and
+landscape. The card layout switches at `40rem`: two columns above, stacked
+below.
+
+What has to hold at every width:
+
+- No horizontal scrolling, ever. `document.scrollWidth` must equal
+  `clientWidth`.
+- Nothing overlaps. Reserve space with layout — flex or grid siblings — rather
+  than a fixed padding guessed against another element's width. That guess is
+  what broke the ledger against the stamp at 660px.
+- Text stays legible: no tap target or control below 44px, and no body text
+  below 11px.
+- Layout survives inflated type. A flex item needs `min-width: 0` before
+  `max-width` will constrain it, because the automatic minimum is the
+  min-content width and a long word will not break on its own.
+
+Verify with real device emulation, not a resized desktop viewport — a desktop
+context narrowed to 320px applies text autosizing that a real iPhone does not,
+and will report failures that do not exist. Wait for `networkidle` **and**
+`document.fonts.ready` before measuring; the unstyled first paint is much
+wider than the real layout and produces phantom overflow.
 
 ## Testing
 

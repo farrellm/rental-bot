@@ -74,7 +74,7 @@ const missingSPA = `<!doctype html>
 <div>
   <p>The API is running. The frontend is not in this binary.</p>
   <p>Build it in with <code>make build</code>, or run <code>make dev</code> to
-     serve the app from Vite on port 5173.</p>
+     serve the app from Vite on port 5174.</p>
   <p><a href="/readyz" style="color:#8FBFB0">Check readiness</a></p>
 </div>
 `

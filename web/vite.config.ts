@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 // The Go binary serves dist/ from its own embed.FS, so asset filenames are
 // fingerprinted (Vite's default) and cached hard by the server.
 //
-// In development the app runs on 5173 and proxies to the Go process on 8080,
+// In development the app runs on 5174 and proxies to the Go process on 8080,
 // so the same relative fetch paths work in both places.
 export default defineConfig({
   plugins: [react()],
@@ -13,7 +13,10 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 5173,
+    port: 5174,
+    // Vite rejects Host headers it does not recognise, which otherwise blocks
+    // reaching the dev server through the public hostname.
+    allowedHosts: ["rental-bot.duckdns.org"],
     proxy: {
       "/api": "http://localhost:8080",
       "/healthz": "http://localhost:8080",

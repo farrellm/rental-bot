@@ -18,8 +18,9 @@ LDFLAGS := -s -w \
 NPM := npm --prefix web
 
 .DEFAULT_GOAL := help
-.PHONY: help dev dev-api dev-web build run migrate test test-web fmt fmt-check \
-        vet lint check tidy web-deps web-install web-build web-clean clean db-shell
+.PHONY: help dev dev-api dev-web watch watch-dev build run migrate test test-web \
+        fmt fmt-check vet lint check tidy web-deps web-install web-build \
+        web-clean clean db-shell
 
 help: ## List the targets
 	@grep -hE '^[a-z][a-z-]*:.*?## ' $(MAKEFILE_LIST) \
@@ -33,8 +34,16 @@ dev: ## Run the API and the Vite dev server together; one Ctrl-C stops both
 dev-api: ## Run the API alone on :8080, serving JSON only
 	go run ./cmd/rental-bot -config $(CONFIG)
 
-dev-web: web-deps ## Run Vite alone on :5173, proxying the API to :8080
+dev-web: web-deps ## Run Vite alone on :5174, proxying the API to :8080
 	@$(NPM) run dev
+
+watch: ## Run the API with live reload, restarting on .go and .sql changes
+	@command -v wgo >/dev/null 2>&1 || { \
+		echo "wgo is not installed: go install github.com/bokwoon95/wgo@latest"; exit 1; }
+	wgo run -file='\.sql$$' ./cmd/rental-bot -config $(CONFIG)
+
+watch-dev: ## Like dev, but the API reloads too
+	@$(MAKE) -j2 --no-print-directory watch dev-web
 
 ## Build ---------------------------------------------------------------------
 
