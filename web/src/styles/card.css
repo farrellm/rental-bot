@@ -1,0 +1,274 @@
+/*
+ * The record card.
+ *
+ * A sheet of stock on the desk: cut edges, a printed grid, entries typed into
+ * a ruled value column, and a stamp across the corner. The stamp is the only
+ * thing on this page that moves.
+ */
+
+.card {
+  position: relative;
+  width: 100%;
+  max-width: var(--card-width);
+
+  color: var(--graphite);
+  background-color: var(--card);
+  /* Paper tooth: a cross-hatch far too faint to read as a pattern. */
+  background-image:
+    repeating-linear-gradient(90deg, rgb(34 49 47 / 0.018) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(0deg, rgb(34 49 47 / 0.012) 0 1px, transparent 1px 4px);
+
+  border: var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--lift);
+}
+
+/* Head band ------------------------------------------------------------- */
+
+.card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: var(--gap-band);
+  border-bottom: var(--rule);
+}
+
+.card__mark {
+  font-size: var(--size-mark);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: var(--track-mark);
+  text-transform: uppercase;
+}
+
+.card__origin,
+.card__eyebrow,
+.card__read {
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+.card__origin,
+.card__read {
+  margin-top: var(--gap-hair);
+}
+
+.card__file {
+  text-align: right;
+}
+
+/* A failed reading, stated where it will be seen first. */
+.card__notice {
+  padding: var(--gap-tight) var(--gap-band);
+  border-bottom: var(--rule);
+  background: rgb(168 58 38 / 0.06);
+  color: var(--oxide);
+  font-size: var(--size-small);
+}
+
+/* Field rows ------------------------------------------------------------ */
+
+.card__fields {
+  padding: 0 var(--gap-band);
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 10rem 1fr;
+  align-items: baseline;
+  gap: var(--gap-tight);
+  padding: 0.625rem 0;
+  border-bottom: 1px dashed var(--card-rule);
+}
+
+.field:last-child {
+  border-bottom: none;
+}
+
+.field__label {
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+.field__value {
+  font-size: var(--size-body);
+  color: var(--graphite);
+  overflow-wrap: anywhere;
+}
+
+.field__value--fault {
+  color: var(--oxide);
+}
+
+/* Schema ledger --------------------------------------------------------- */
+
+.ledger {
+  padding: var(--gap-band);
+  /* The stamp lands in this band's right corner; the ledger keeps clear. */
+  padding-right: 15rem;
+  border-top: var(--rule);
+}
+
+.ledger__eyebrow {
+  font-size: var(--size-micro);
+  font-weight: 600;
+  color: var(--muted-ink);
+}
+
+.ledger__list {
+  margin-top: var(--gap-tight);
+}
+
+/* Two columns rather than a spread, so the entries read as a ledger and the
+   dates stay in one place regardless of filename length. */
+.ledger__row {
+  display: grid;
+  grid-template-columns: 11rem auto;
+  gap: var(--gap-tight);
+  padding: 0.2rem 0;
+  font-size: var(--size-small);
+}
+
+.ledger__at {
+  color: var(--muted-ink);
+  white-space: nowrap;
+}
+
+.ledger__empty {
+  margin-top: var(--gap-tight);
+  font-size: var(--size-small);
+  color: var(--amber);
+}
+
+/* Values that were true when they were read, but are no longer live. */
+.card[data-stale="true"] .card__fields,
+.card[data-stale="true"] .ledger {
+  opacity: 0.55;
+}
+
+/* The stamp ------------------------------------------------------------- */
+
+.stamp {
+  position: absolute;
+  /* Fully on the stock: the ink multiplies into the parchment, and would
+     vanish into the petrol ground if it hung off the edge. */
+  right: 1.5rem;
+  bottom: 1.1rem;
+
+  padding: 0.55rem 1.35rem 0.5rem;
+  text-align: center;
+
+  color: var(--verdigris);
+  border: 2px solid currentcolor;
+  border-radius: 3px;
+  /* Ink sits into the stock rather than on top of it. */
+  mix-blend-mode: multiply;
+  opacity: 0.92;
+
+  transform: rotate(var(--stamp-turn));
+  animation: stamp-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+/* The inner rule of a two-ring stamp. */
+.stamp::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid currentcolor;
+  border-radius: 2px;
+}
+
+.stamp--degraded {
+  color: var(--amber);
+}
+
+.stamp--no-contact {
+  color: var(--oxide);
+}
+
+.stamp__word {
+  display: block;
+  font-size: var(--size-stamp);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stamp__at {
+  display: block;
+  margin-top: 0.35rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid currentcolor;
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+}
+
+@keyframes stamp-in {
+  from {
+    transform: rotate(var(--stamp-turn)) scale(1.4);
+    opacity: 0;
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    transform: rotate(var(--stamp-turn)) scale(1);
+    opacity: 0.92;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp {
+    animation: none;
+  }
+}
+
+/* Narrow ---------------------------------------------------------------- */
+
+@media (max-width: 40rem) {
+  .card__head {
+    flex-direction: column;
+    gap: var(--gap-tight);
+  }
+
+  .card__file {
+    text-align: left;
+  }
+
+  .field {
+    grid-template-columns: 1fr;
+    gap: 0.125rem;
+  }
+
+  .ledger {
+    padding-right: var(--gap-band);
+  }
+
+  .ledger__row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  /* No corner to hang off, so the stamp lands on the card itself. */
+  .stamp {
+    position: static;
+    display: block;
+    width: max-content;
+    margin: 0 auto var(--gap-band);
+    transform: rotate(-3deg);
+  }
+
+  @keyframes stamp-in {
+    from {
+      transform: rotate(-3deg) scale(1.4);
+      opacity: 0;
+    }
+    60% {
+      opacity: 1;
+    }
+    to {
+      transform: rotate(-3deg) scale(1);
+      opacity: 0.92;
+    }
+  }
+}

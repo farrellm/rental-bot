@@ -1,0 +1,56 @@
+/*
+ * Design tokens for rental-bot.
+ *
+ * The visual language is the county property record card: the paper artifact
+ * this application replaces. Card stock on a dark desk, printed rules,
+ * typewriter entries in the value column, and a rubber stamp for the state of
+ * things. Every screen in the app inherits these tokens — use them, never a
+ * literal hex value, so a change here reaches the whole product.
+ *
+ * Accent colours are chosen to clear 4.5:1 against --card, because they carry
+ * meaning in text and not only in the stamp.
+ */
+
+:root {
+  /* Surfaces */
+  --ground: #132227; /* deep petrol — the desk */
+  --ground-deep: #0d181b; /* vignette behind the card */
+  --card: #e8e2d2; /* card stock */
+  --card-rule: #c4bca6; /* printed rules and the card's own edge */
+
+  /* Ink */
+  --graphite: #22312f; /* body ink, all values */
+  --muted-ink: #566260; /* field labels, secondary entries */
+
+  /* State — a word always accompanies the colour; colour is never alone */
+  --verdigris: #1f5f52; /* operational */
+  --amber: #7e520f; /* degraded */
+  --oxide: #a83a26; /* fault, no contact */
+
+  /* Type */
+  --face-display: "Archivo Variable", "Archivo", system-ui, sans-serif;
+  --face-mono: "Space Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --size-micro: 0.6875rem; /* 11px — eyebrows, field labels */
+  --size-small: 0.75rem; /* 12px — ledger entries */
+  --size-body: 0.875rem; /* 14px — field values */
+  --size-lead: 1rem; /* 16px */
+  --size-stamp: 1.25rem; /* 20px — the stamp's word */
+  --size-mark: 1.75rem; /* 28px — the wordmark */
+
+  --track-label: 0.14em; /* stamped-label tracking */
+  --track-mark: 0.06em;
+
+  /* Rhythm */
+  --gap-hair: 0.375rem;
+  --gap-tight: 0.75rem;
+  --gap: 1.25rem;
+  --gap-band: 1.5rem;
+  --card-width: 44rem;
+
+  --radius: 2px; /* card stock has a cut edge, not a rounded one */
+  --rule: 1px solid var(--card-rule);
+
+  --lift: 0 18px 40px -20px rgb(0 0 0 / 0.75), 0 2px 4px rgb(0 0 0 / 0.35);
+  --stamp-turn: -7deg;
+}

@@ -12,3 +12,4 @@
 
 # Secrets — never committed; see config.example.toml
 secret.key
+.playwright-mcp/

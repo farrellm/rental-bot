@@ -1,0 +1,23 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+// The Go binary serves dist/ from its own embed.FS, so asset filenames are
+// fingerprinted (Vite's default) and cached hard by the server.
+//
+// In development the app runs on 5173 and proxies to the Go process on 8080,
+// so the same relative fetch paths work in both places.
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+  },
+  server: {
+    port: 5173,
+    proxy: {
+      "/api": "http://localhost:8080",
+      "/healthz": "http://localhost:8080",
+      "/readyz": "http://localhost:8080",
+    },
+  },
+});
