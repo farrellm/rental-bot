@@ -1,0 +1,40 @@
+# rental-bot configuration.
+#
+# Copy to config.toml and edit, or leave it out entirely — every value below
+# is a default and every one can be overridden with an environment variable
+# named RENTAL_BOT_<SECTION>_<KEY>, e.g. RENTAL_BOT_SERVER_ADDR=:9000.
+#
+# Secrets are never read from this file. See the bottom of this file.
+
+[server]
+# Listen address. Put Caddy in front of this for TLS; Pub/Sub push requires a
+# valid public HTTPS endpoint.
+addr = ":8080"
+# The origin the operator reaches the app on. Deep links in email replies and
+# Telegram messages are built from it.
+base_url = "http://localhost:8080"
+
+[database]
+# SQLite file. Its parent directory is created at startup if missing.
+path = "data/rental.db"
+# Reader connections. Writes serialize on a single connection no matter what
+# this is set to — see docs/DESIGN.md §2.
+read_pool_size = 4
+
+[storage]
+# Content-addressed blob store and the raw .eml archive.
+blobs = "data/blobs"
+raw_email = "data/raw-email"
+
+[log]
+# debug | info | warn | error
+level = "info"
+# text | json — json for the systemd unit, text at a terminal.
+format = "text"
+
+# Secrets come from the environment, never from here:
+#
+#   RENTAL_BOT_SECRET_KEY       the AES-GCM key protecting encrypted columns
+#   RENTAL_BOT_SECRET_KEY_FILE  a path to that key; the file must be mode 0600
+#
+# Setting a [secrets] table in this file has no effect.
