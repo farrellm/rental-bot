@@ -168,6 +168,32 @@ select.entry {
   background: var(--oxide-wash);
 }
 
+/* Striking a row out of a list.
+ *
+ * A bordered button on every line turns a list into a column of buttons with
+ * some content beside them, which is backwards for a ledger or a file that
+ * exists to be read. So it is a word in the margin: no rule, faint until the
+ * row is under the pointer or the word itself has focus, and always legible
+ * where there is no pointer to hover with. It still meets the tap-target
+ * floor, because it is still a control.
+ */
+.button--quiet {
+  min-height: var(--control-min);
+  padding: 0 var(--gap-hair);
+  border: none;
+  opacity: 0;
+}
+
+.button--quiet:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .button--quiet {
+    opacity: 0.5;
+  }
+}
+
 /* A button standing on the ground rather than on stock, in the band or over
    an empty drawer. */
 .button--ground {

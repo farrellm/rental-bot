@@ -140,36 +140,14 @@
   color: var(--oxide);
 }
 
-/* Striking an entry out.
- *
- * A bordered button on every line turned the sheet into a column of buttons
- * with some numbers beside them, which is backwards: a ledger is for reading.
- * So it is a word in the margin, no rule around it, faint until the line is
- * under the pointer or the word itself has focus. It still meets the tap
- * target floor, because on a touch device there is no hover to reveal it. */
+/* Striking an entry out. The quiet treatment is .button--quiet in
+   controls.css; this only says where it sits and what reveals it. */
 .ledger-sheet__strike {
   justify-self: end;
-  min-height: var(--control-min);
-  padding: 0 var(--gap-hair);
-  border: none;
-  color: var(--oxide);
-  opacity: 0;
 }
 
-.ledger-sheet__row:hover .ledger-sheet__strike,
-.ledger-sheet__strike:focus-visible {
+.ledger-sheet__row:hover .ledger-sheet__strike {
   opacity: 1;
-}
-
-/* Nothing to hover with, so it is always legible -- quietly. */
-@media (hover: none) {
-  .ledger-sheet__strike {
-    opacity: 0.5;
-  }
-}
-
-.ledger-sheet__strike:hover:not(:disabled) {
-  background: var(--oxide-wash);
 }
 
 /* The foot takes the sheet's own columns through subgrid, so a total lands in

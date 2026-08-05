@@ -61,6 +61,9 @@ export function PropertyRecord({ isNew = false }: { isNew?: boolean }) {
             <NavLink to={`/properties/${id}/leases`} className={tabClass}>
               Leases
             </NavLink>
+            <NavLink to={`/properties/${id}/documents`} className={tabClass}>
+              Documents
+            </NavLink>
           </nav>
         )}
 

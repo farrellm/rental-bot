@@ -161,7 +161,7 @@ export function CashFlow() {
                     <span className="ledger-sheet__figure mono">{money(entry.amount_cents)}</span>
                     <button
                       type="button"
-                      className="button button--danger ledger-sheet__strike"
+                      className="button button--danger button--quiet ledger-sheet__strike"
                       onClick={() => void remove(entry.id)}
                       aria-label={`Remove the entry of ${money(entry.amount_cents)} on ${entry.occurred_on}`}
                     >
