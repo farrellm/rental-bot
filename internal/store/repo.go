@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
@@ -71,4 +72,14 @@ var ErrNotFound = errors.New("store: not found")
 // NotFound reports whether err means the row was absent.
 func NotFound(err error) bool {
 	return errors.Is(err, sql.ErrNoRows) || errors.Is(err, ErrNotFound)
+}
+
+// Conflict reports whether err is a uniqueness violation, which a handler
+// answers with 409 rather than 500: two units labelled "Main" on one property
+// is the caller's mistake, not the server's.
+//
+// modernc.org/sqlite reports constraint failures as a message rather than a
+// typed error, so this matches on the text SQLite itself produces.
+func Conflict(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }

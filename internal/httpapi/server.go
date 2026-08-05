@@ -96,6 +96,8 @@ func New(opts Options) http.Handler {
 	route(mux, "/api/v1/auth/me", methods{http.MethodGet: s.guarded(s.handleMe)})
 	route(mux, "/api/v1/status", methods{http.MethodGet: s.guarded(s.handleStatus)})
 
+	s.routeProperties(mux)
+
 	// Anything else under /api/ is a client mistake, and it gets a
 	// problem+json 404 rather than the SPA's index.html.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
