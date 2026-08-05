@@ -67,7 +67,7 @@ export function PropertyRecord({ isNew = false }: { isNew?: boolean }) {
           </nav>
         )}
 
-        <article className="card stock">
+        <article className="card">
           <header className="card__head">
             <div>
               {/* The head is what is on file. While a section is open for

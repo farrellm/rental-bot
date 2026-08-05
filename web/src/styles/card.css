@@ -9,10 +9,18 @@
 /* The stock itself: colour and tooth, with no edges.
  *
  * A card is stock plus a cut edge and a shadow. A divider tab is stock with
- * three edges, cut from the same sheet — which is why this is its own class
- * rather than lines repeated in tabs.css. The tooth has to match exactly or
- * the joint between a tab and its card is visible. */
-.stock {
+ * three edges, cut from the same sheet — which is why this is a class rather
+ * than lines repeated in tabs.css. The tooth has to match exactly or the joint
+ * between a tab and its card is visible.
+ *
+ * `.card` is listed here rather than being asked to wear `.stock` as a second
+ * class. A card that is not on stock is not a card, and making that an opt-in
+ * meant three screens rendered as dark rectangles with unreadable ink the
+ * moment this was extracted — the index, the sign-in slip, and the service
+ * record all had a `.card` that nobody remembered to update. A rule nobody can
+ * forget beats a rule everybody has to. */
+.stock,
+.card {
   color: var(--graphite);
   background-color: var(--card);
   /* Paper tooth: a cross-hatch far too faint to read as a pattern. */
