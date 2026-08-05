@@ -8,8 +8,9 @@ pipeline, the LLM boundary, valuations, alerting, and the milestone plan. Read
 it before proposing anything structural; this file records only what the code
 does not already say.
 
-Current milestone: **M1 complete** (auth, properties and units CRUD). Next is
-M2 — documents, blob store, manual transactions / repairs / leases.
+Current milestone: **M2 complete** (documents, blob store, manual
+transactions / repairs / leases). Next is M3 — Gmail watch, webhook, fallback
+poller, raw archive.
 
 ## Commands
 
@@ -35,6 +36,7 @@ internal/config     TOML + RENTAL_BOT_* env overlay
 internal/store      SQLite pools, migration runner, sqlc queries
 internal/auth       argon2id, sessions, CSRF, rate limiting, middleware
 internal/domain     Money, address normalization
+internal/blob       content-addressed store for document bytes
 internal/httpapi    handlers, DTOs, middleware, problem+json, SPA serving
 internal/version    ldflags-stamped build identity
 migrations/         NNNN_name.sql, embedded
@@ -42,9 +44,9 @@ web/                Vite React app, plus the build-tagged embed
 ```
 
 The packages in `docs/DESIGN.md` §10 that are not listed here — `gmail`,
-`ingest`, `llm`, `valuation`, `alert`, `telegram`, `blob`, `jobs`,
-`scheduler` — arrive with the milestones that need them. Don't create them
-empty ahead of time.
+`ingest`, `llm`, `valuation`, `alert`, `telegram`, `jobs`, `scheduler` —
+arrive with the milestones that need them. Don't create them empty ahead of
+time.
 
 ## sqlc
 
@@ -104,6 +106,33 @@ decision, not a refactor.
   zero would fork the query shape for every later milestone.
 - **Sessions are opaque tokens; only the SHA-256 hash is stored.** Mutating
   requests need the `X-CSRF-Token` header matching the `rb_csrf` cookie.
+- **A document's SHA-256 is its identity.** `documents.sha256` is UNIQUE and
+  the bytes live at `blobs/<sha[0:2]>/<sha[2:4]>/<sha256>`, mode `0600` under
+  `0700` directories. Uploading bytes already on file returns the existing row
+  with `200` and `deduplicated: true` — forwarding the same receipt twice is
+  normal, not an error. `blob.ValidDigest` guards the one place a
+  caller-supplied string becomes a path; lowercase hex only, because accepting
+  both cases would file one file at two paths.
+- **Document content is served only through the authenticated handler**, never
+  by the reverse proxy. Only `application/pdf`, `image/png|jpeg|gif|webp`, and
+  `text/plain` are served `inline`; everything else is `attachment`, so an
+  uploaded HTML or SVG cannot run script on the app's own origin. `nosniff` and
+  `default-src 'none'; sandbox` are the second and third layers.
+- **Occupancy is derived on every read, never stored.** A unit is occupied if a
+  lease covers today (`ListUnitsWithOccupancy`). The API returns the lease's
+  *id*, not a boolean, so a screen can link to the evidence. There is no
+  `is_occupied` column and there must not be one.
+- **A unit holds one live lease at a time**, enforced in the write path — two
+  pending-or-active leases covering the same days make occupancy ambiguous, and
+  the derived answer only stays unambiguous if the write refuses. Ended and
+  terminated leases are history and overlap nothing.
+- **The signed-cents convention is `transactions.amount_cents` only.** There
+  the sign is the sole thing separating income from expense. A repair estimate
+  or a rent is a magnitude; negating one produces "-$650.00" on a screen where
+  it reads as a mistake.
+- **A `sqlc.narg` in a SQLite query needs a `CAST(... AS TEXT)` around it**, or
+  sqlc's inference gives up and types the parameter `interface{}`. The casts in
+  `transactions.sql` are load-bearing; don't tidy them away.
 - **Nothing from an LLM reaches the ledger except through `ingest_proposals`**
   (from M4). Extraction runs tool-free with `MaxSteps: 1`, because forwarded
   email is untrusted input.
@@ -121,10 +150,24 @@ decision, not a refactor.
   add a fill on focus — the focus ring is the indicator, and a fill draws back
   the box the whole design avoids.
 - **Buttons are ink on stock**: a rule and a word, never a filled rectangle.
+  Removing a row from a list is `.button--quiet` — a word in the margin with no
+  rule, revealed on hover or focus and always legible where there is no hover.
+  A bordered button on every line turns a list into a column of buttons with
+  some content beside it.
+- **A section of a property record is a divider tab**, cut from the same stock
+  (`.stock` in `card.css`) and lapping the card's top rule by a pixel. Below
+  40rem the tabs wrap, so the current one gets four edges instead — a joint
+  drawn to a row that is not the card reads as a bug.
 - **The stamp is the app's state machine.** One component says OPERATIONAL,
-  DEGRADED, NO CONTACT, ACTIVE, PROSPECT, SOLD, AMENDING, REFUSED. Every
-  variant is one `color:` declaration, because the border, inner ring, and
-  divider all take `currentcolor`. It stays the only thing that moves.
+  DEGRADED, NO CONTACT, ACTIVE, PROSPECT, SOLD, AMENDING, REFUSED, and from M2
+  OPEN, SCHEDULED, IN PROGRESS, DONE, WON'T FIX, PENDING, ENDED, TERMINATED.
+  Every variant is one `color:` declaration, because the border, inner ring,
+  and divider all take `currentcolor`. It stays the only thing that moves.
+- **The lease term rule is the one drawn thing in the application** and it
+  stays that way. It draws only what the dates say: a month-to-month lease gets
+  no end tick, because inventing one asserts a fact the record does not hold.
+  Dates are differenced at UTC midnight — they were stored without a timezone,
+  and anything else makes "ends today" depend on where the reader is sitting.
 - **Nouns carry the metaphor, verbs stay plain.** A "record" with a "file
   number" and an AMENDING stamp; buttons that say "Sign in", "Save changes",
   "Add unit".
@@ -168,19 +211,35 @@ Standard library `testing`, table-driven where there is more than one case. No
 assertion library. Store tests open a real SQLite file under `t.TempDir()`;
 `httpapi` tests substitute the small `Health` interface rather than a database.
 
-## Known gaps at M1
+## Known gaps at M2
 
-- **`audit_log` is not written.** §8.5 implies web mutations are audited, but
-  the table is not in migration 0001 and §11 assigns it to no milestone.
-  Adding it exceeded "auth, properties and units CRUD".
-- **`PATCH`/`DELETE /api/v1/units/{id}` are not in §7.1's table**, which gives
-  no path for mutating a single unit. The screen needs both, so they exist.
+- **`audit_log` is still not written.** §8.5 implies web mutations are audited,
+  but the table is in no migration and §11 assigns it to no milestone.
+- **Orphaned blobs are never reclaimed.** Deleting a document removes the row
+  and its links and leaves the bytes: a digest is the only name content has,
+  and a restore should still find the file. A sweep belongs with M7's backup
+  work, not with a single delete.
+- **`documents_fts` is deferred to M6**, where the search endpoint gives it a
+  reason to exist. Backfilling it over the documents on file is one
+  `INSERT … SELECT`.
+- **`document_links.entity_type` carries a CHECK over the entities that exist
+  at M2.** Widening it for a later milestone's entity means rebuilding the
+  table, which is the price of a typo'd type failing loudly instead of
+  silently orphaning a link.
+- **`transactions.proposal_id` and `documents.source_message_id` are absent**
+  on purpose: with `foreign_keys=ON` a reference to a table that does not exist
+  yet fails at INSERT rather than at CREATE. M3 and M4 add each column with its
+  constraint.
+- **`PATCH`/`DELETE /api/v1/units/{id}`, and the repair, lease, tenant and
+  vendor routes, are not all in §7.1's table.** The screens need them, and the
+  endpoint list in the README is the current authority.
 - **Rate-limiter state is in memory** and does not survive a restart.
   Persisting it would put a write on every failed sign-in.
 - **TOTP is still deferred.** The `users.totp_secret` column carries no rows.
-- Migration 0001 lands only the tables M0 and M1 touch. The rest of
+- Migrations land only the tables a milestone touches. The rest of
   `docs/DESIGN.md` §3 arrives milestone by milestone.
-- Property detail has no tab bar. §7.2 describes eight tabs; seven of them are
-  later milestones, and a tab bar with one tab is not a tab bar.
-- List pagination works but nothing pages yet — the index fetches one page and
-  the frontend ignores `next_cursor`. It matters past 50 properties.
+- Property detail has five of §7.2's eight tabs. Insurance, Mortgage, and Value
+  arrive with the milestones that fill them.
+- **List pagination works but nothing pages yet** — every index fetches one
+  page and the frontend ignores `next_cursor`. It matters past 50 properties,
+  or a property with a long ledger.

@@ -14,9 +14,11 @@ plan.
 
 ## Status
 
-**M1** — auth, properties and units CRUD. You can sign in, put properties on
-file with their units, and amend them. Documents, transactions, and the email
-ingestion the product exists for arrive with M2 onward.
+**M2** — documents, blob store, manual transactions / repairs / leases. You
+can sign in, put properties on file with their units, file documents against
+them, keep a cash-flow ledger, run repairs with a dated history, and record
+leases and tenants. Occupancy is derived from the lease dates rather than
+stored. The email ingestion the product exists for arrives with M3 and M4.
 
 ## Requirements
 
@@ -144,6 +146,9 @@ anything.
 RENTAL_BOT_SERVER_ADDR=:9000 RENTAL_BOT_LOG_FORMAT=json make dev-api
 ```
 
+`storage.max_upload_bytes` caps one document at 25 MiB by default. It is a cap
+on the request body, so anything larger is refused before it reaches the disk.
+
 Secrets are never read from the config file. The AES-GCM key protecting
 encrypted columns comes from `RENTAL_BOT_SECRET_KEY`, or from a file named by
 `RENTAL_BOT_SECRET_KEY_FILE` that must be mode `0600`.
@@ -169,6 +174,38 @@ Everything under `/api/v1` needs one, except signing in:
 | `GET/PATCH/DELETE /api/v1/properties/{id}` | One property, with its units inline. |
 | `GET/POST /api/v1/properties/{id}/units` | The units of one property. |
 | `PATCH/DELETE /api/v1/units/{id}` | One unit. Deleting the last one is a `409`. |
+
+Documents, the ledger, and tenancy:
+
+| Path | Purpose |
+| --- | --- |
+| `POST /api/v1/documents` | Upload, as `multipart/form-data`. Bytes already on file return `200` with `deduplicated: true` rather than a second row. |
+| `GET /api/v1/properties/{id}/documents` | Everything filed against a property. |
+| `GET/PATCH/DELETE /api/v1/documents/{id}` | One document's record. Deleting it leaves the bytes. |
+| `GET /api/v1/documents/{id}/content` | The bytes, for a signed-in operator only. |
+| `POST/DELETE /api/v1/documents/{id}/links` | File a document against any record. |
+| `GET/POST /api/v1/properties/{id}/transactions` | The ledger, with `from`, `to`, and `category` filters. The response carries the server's totals for the whole filtered set. |
+| `PATCH/DELETE /api/v1/transactions/{id}` | One ledger entry. |
+| `GET/POST /api/v1/properties/{id}/repairs` | Repairs, filterable by `status`. |
+| `GET/PATCH/DELETE /api/v1/repairs/{id}` | One repair, with its event timeline inline. |
+| `POST /api/v1/repairs/{id}/events` | Add a dated line to a repair's history. |
+| `DELETE /api/v1/repair-events/{id}` | Remove one. |
+| `GET/POST /api/v1/properties/{id}/leases` | Leases, reached through the property's units. |
+| `GET/PATCH/DELETE /api/v1/leases/{id}` | One lease, with its tenants inline. A second live lease on one unit is a `409`. |
+| `POST/DELETE /api/v1/leases/{id}/tenants` | Who is on a lease. |
+| `GET/POST /api/v1/tenants`, `GET/PATCH/DELETE /api/v1/tenants/{id}` | Tenants, portfolio-wide. |
+| `GET/POST /api/v1/vendors`, `GET/PATCH/DELETE /api/v1/vendors/{id}` | Vendors, portfolio-wide. |
+
+Money on the wire is a signed integer count of cents. On a ledger entry the
+sign is the whole distinction: income positive, expense negative. A repair
+estimate or a rent is a magnitude and carries no sign.
+
+Uploaded documents are stored by content: the SHA-256 is the filename, under
+`blobs/<aa>/<bb>/<sha256>`, so re-forwarding a PDF costs nothing. Their bytes
+are served only through `GET /api/v1/documents/{id}/content`, which needs a
+session; only PDFs, common images, and plain text are served `inline`, and
+everything else downloads, so an uploaded HTML file cannot run script on the
+app's own origin.
 
 Errors are RFC 7807 `application/problem+json`, always, including `405`s.
 
