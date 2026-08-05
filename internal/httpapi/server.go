@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/farrellm/rental-bot/internal/auth"
+	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
 	"github.com/farrellm/rental-bot/internal/store"
 )
@@ -32,6 +33,9 @@ type Options struct {
 	DB     Health
 	// Repo is the query layer the CRUD handlers read and write through.
 	Repo *store.Repo
+	// Blobs holds document content. A nil Blobs fails the document routes with
+	// a 503 rather than panicking on the first upload.
+	Blobs *blob.Store
 	// Guard authenticates requests. A nil Guard fails every guarded route
 	// closed with a 503 rather than leaving the API open.
 	Guard *auth.Guard
@@ -51,6 +55,7 @@ type server struct {
 	cfg       config.Config
 	db        Health
 	repo      *store.Repo
+	blobs     *blob.Store
 	guard     *auth.Guard
 	limiter   *auth.Limiter
 	log       *slog.Logger
@@ -74,6 +79,7 @@ func New(opts Options) http.Handler {
 		cfg:       opts.Config,
 		db:        opts.DB,
 		repo:      opts.Repo,
+		blobs:     opts.Blobs,
 		guard:     opts.Guard,
 		limiter:   opts.Limiter,
 		log:       opts.Logger,
@@ -97,6 +103,7 @@ func New(opts Options) http.Handler {
 	route(mux, "/api/v1/status", methods{http.MethodGet: s.guarded(s.handleStatus)})
 
 	s.routeProperties(mux)
+	s.routeDocuments(mux)
 
 	// Anything else under /api/ is a client mistake, and it gets a
 	// problem+json 404 rather than the SPA's index.html.

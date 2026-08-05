@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/farrellm/rental-bot/internal/auth"
+	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
 	"github.com/farrellm/rental-bot/internal/httpapi"
 	"github.com/farrellm/rental-bot/internal/store"
@@ -95,6 +96,11 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 	}
 
 	repo := db.Repo()
+	blobs, err := blob.New(cfg.Storage.Blobs)
+	if err != nil {
+		return err
+	}
+
 	// Secure cookies follow the configured scheme. https in production is not
 	// optional; hardcoding it would break a phone testing over the LAN.
 	secure := strings.HasPrefix(cfg.Server.BaseURL, "https://")
@@ -105,6 +111,7 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 		Config:    cfg,
 		DB:        db,
 		Repo:      repo,
+		Blobs:     blobs,
 		Guard:     guard,
 		Limiter:   auth.NewLimiter(),
 		Logger:    logger,

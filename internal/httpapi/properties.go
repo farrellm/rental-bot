@@ -574,12 +574,13 @@ var errBadCursor = errors.New("httpapi: malformed cursor")
 
 // encodeCursor names the last row of a page by its sort key.
 //
-// The sort is (nickname, id), so the cursor carries both: nickname is not
-// unique, and a cursor that carried only the name would skip or repeat rows
-// wherever two properties share one.
-func encodeCursor(nickname string, id int64) string {
+// Every keyset in this API sorts on a text column and breaks the tie on id, so
+// the cursor carries both: properties sort by nickname and documents by
+// created_at, and neither is unique. A cursor that carried only the first would
+// skip or repeat rows wherever two rows share it.
+func encodeCursor(sortKey string, id int64) string {
 	return base64.RawURLEncoding.EncodeToString(
-		[]byte(nickname + "\x00" + strconv.FormatInt(id, 10)))
+		[]byte(sortKey + "\x00" + strconv.FormatInt(id, 10)))
 }
 
 func decodeCursor(cursor string) (string, int64, error) {
@@ -587,7 +588,7 @@ func decodeCursor(cursor string) (string, int64, error) {
 	if err != nil {
 		return "", 0, errBadCursor
 	}
-	nickname, rest, found := strings.Cut(string(raw), "\x00")
+	sortKey, rest, found := strings.Cut(string(raw), "\x00")
 	if !found {
 		return "", 0, errBadCursor
 	}
@@ -595,7 +596,7 @@ func decodeCursor(cursor string) (string, int64, error) {
 	if err != nil {
 		return "", 0, errBadCursor
 	}
-	return nickname, id, nil
+	return sortKey, id, nil
 }
 
 // timestamp is now, spelled the way this schema spells every timestamp.
