@@ -7,6 +7,8 @@ import { Properties } from "./screens/Properties";
 import { PropertyRecord } from "./screens/PropertyRecord";
 import { CashFlow } from "./screens/property/CashFlow";
 import { Overview } from "./screens/property/Overview";
+import { Leases } from "./screens/property/Leases";
+import { Repairs } from "./screens/property/Repairs";
 import { Service } from "./screens/Service";
 import { SignIn } from "./screens/SignIn";
 
@@ -58,6 +60,8 @@ export function AppRoutes() {
         <Route path="/properties/:id" element={<PropertyRecord />}>
           <Route index element={<Overview />} />
           <Route path="cash-flow" element={<CashFlow />} />
+          <Route path="repairs" element={<Repairs />} />
+          <Route path="leases" element={<Leases />} />
         </Route>
         <Route path="/service" element={<Service />} />
         <Route path="/" element={<Navigate to="/properties" replace />} />

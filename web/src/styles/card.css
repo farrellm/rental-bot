@@ -254,6 +254,37 @@
   color: var(--oxide);
 }
 
+/* Repairs. Work outstanding is amber, work finished goes quiet, and work that
+   will not be done reads as history rather than as fault -- nobody is owed
+   anything on a wontfix. */
+.stamp--open,
+.stamp--scheduled,
+.stamp--in-progress {
+  color: var(--amber);
+}
+
+.stamp--done {
+  color: var(--verdigris);
+}
+
+.stamp--wontfix {
+  color: var(--muted-ink);
+}
+
+/* Leases. Signed but not started yet is provisional, like a prospect. */
+.stamp--pending {
+  color: var(--amber);
+}
+
+.stamp--ended {
+  color: var(--muted-ink);
+}
+
+/* Ended early. Not a fault of the system, but a thing worth seeing. */
+.stamp--terminated {
+  color: var(--oxide);
+}
+
 /* On an index card, where the stamp marks a record rather than heading one. */
 .stamp--small {
   padding: 0.3rem 0.7rem 0.28rem;
