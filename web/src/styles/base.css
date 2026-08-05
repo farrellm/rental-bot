@@ -12,11 +12,13 @@ html {
 
 body {
   margin: 0;
-  min-height: 100vh;
-  padding: clamp(1rem, 5vw, 4rem) clamp(0.75rem, 4vw, 3rem);
+  /* dvh, not vh: on iOS the viewport unit counts the address bar that is not
+     there, and the page ends up taller than the screen it is on. */
+  min-height: 100dvh;
 
-  display: grid;
-  place-items: center;
+  /* The shell owns the layout now. This centred a single card when there was
+     only one screen; a list of properties starts at the top. */
+  display: block;
 
   font-family: var(--face-display);
   font-size: var(--size-body);

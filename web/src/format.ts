@@ -49,6 +49,69 @@ export function orDash(value: string | undefined): string {
   return value && value !== "unknown" ? value : EM_DASH;
 }
 
+/**
+ * Renders whole cents as "$285,000.00".
+ *
+ * The wire carries an integer count of cents and this is the only place it
+ * becomes a decimal — on its way to a person's eyes and nowhere else. Null is
+ * an em dash, because a property with no recorded purchase price is not a
+ * property that cost nothing.
+ */
+export function money(cents: number | null | undefined): string {
+  if (cents === null || cents === undefined || !Number.isFinite(cents)) return EM_DASH;
+
+  const negative = cents < 0;
+  const abs = Math.abs(Math.trunc(cents));
+  const whole = String(Math.floor(abs / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const fraction = String(abs % 100).padStart(2, "0");
+
+  return `${negative ? "-" : ""}$${whole}.${fraction}`;
+}
+
+/**
+ * Parses a typed amount back into whole cents, or null when the field is
+ * empty. Anything that is not a number is `undefined`, which the caller
+ * reports rather than silently rounding.
+ */
+export function parseMoney(input: string): number | null | undefined {
+  const trimmed = input.trim().replace(/[$,\s]/g, "");
+  if (trimmed === "") return null;
+  if (!/^-?\d*(\.\d{0,2})?$/.test(trimmed) || trimmed === "-" || trimmed === ".") return undefined;
+
+  const negative = trimmed.startsWith("-");
+  const [whole = "0", fraction = ""] = trimmed.replace("-", "").split(".");
+  const cents = Number(whole || "0") * 100 + Number(fraction.padEnd(2, "0") || "0");
+
+  return Number.isFinite(cents) ? (negative ? -cents : cents) : undefined;
+}
+
+/** Renders a nullable number, so an unknown value reads as unknown. */
+export function orDashNumber(value: number | null | undefined, suffix = ""): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return EM_DASH;
+  return `${value}${suffix}`;
+}
+
+/** Renders a count with its noun: "1 unit", "3 units". */
+export function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/**
+ * The file number in the corner of a card.
+ *
+ * It is the record's own id, zero-padded so the column reads as a column.
+ * Nothing decorative: two properties never share one, and it is what you would
+ * say out loud to name a record.
+ */
+export function fileNumber(id: number): string {
+  return `No. ${String(id).padStart(4, "0")}`;
+}
+
+/** A calendar date exactly as stored, never reinterpreted through a timezone. */
+export function calendarDate(value: string | null | undefined): string {
+  return value ? value : EM_DASH;
+}
+
 function datePart(at: Date): string {
   return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
 }

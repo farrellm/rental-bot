@@ -1,0 +1,180 @@
+/*
+ * The shell: the desk, and the label on the drawer.
+ *
+ * The band across the top sits on the petrol ground, never on stock — it is
+ * the drawer this file of cards came out of, not one of the cards. Everything
+ * below it is a card or a stack of them.
+ */
+
+.shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell__band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+
+  padding: var(--gap-tight) clamp(0.75rem, 4vw, 3rem);
+  border-bottom: 1px solid rgb(232 226 210 / 0.14);
+}
+
+.shell__mark {
+  /* The wordmark is a link home, so it answers to the tap-target floor like
+     every other control. Its cap height is 16px; the box around it is not. */
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-min);
+
+  /* min-width: 0 before anything constrains it, because a flex item's
+     automatic minimum is its min-content width and "RENTAL-BOT" will not
+     break on its own. */
+  min-width: 0;
+  font-size: var(--size-lead);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: var(--track-mark);
+  text-transform: uppercase;
+  color: var(--card);
+  text-decoration: none;
+}
+
+.shell__mark:hover {
+  color: var(--card);
+}
+
+.shell__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+}
+
+/* Navigation is set on the ground, so it is bone on petrol rather than ink on
+   stock, and it wants its own hover. */
+.shell__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-min);
+  padding: 0 var(--gap-hair);
+
+  font-family: var(--face-display);
+  font-size: var(--size-micro);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  text-decoration: none;
+  color: rgb(232 226 210 / 0.66);
+
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.shell__link:hover,
+.shell__link[aria-current="page"] {
+  color: var(--card);
+}
+
+/* The current screen is underlined rather than filled: the band has no
+   surface to fill. */
+.shell__link[aria-current="page"] {
+  box-shadow: inset 0 -1px 0 0 currentcolor;
+}
+
+.shell__main {
+  flex: 1 1 auto;
+  width: 100%;
+  padding: clamp(1rem, 5vw, 3rem) clamp(0.75rem, 4vw, 3rem);
+}
+
+/* A screen holding one card centres it; the sign-in slip also centres
+   vertically, because there is nothing else on the desk. */
+/* A card is as tall as what is on it. Without this the flex default stretches
+   it to the full column and strands the foot at the bottom of the screen. */
+.shell__main--single {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* The sign-in slip has no band above it, so it centres against the whole
+   viewport rather than against whatever is left under the drawer label. */
+.shell__main--slip {
+  align-items: center;
+  min-height: 100dvh;
+}
+
+/* The heading above a stack of cards: what this drawer holds, and the one
+   action that adds to it. */
+.screen-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+
+  max-width: 76rem;
+  margin: 0 auto var(--gap) auto;
+}
+
+.screen-head__title {
+  min-width: 0;
+  font-size: var(--size-micro);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: rgb(232 226 210 / 0.66);
+}
+
+.screen-head__count {
+  margin-left: var(--gap-hair);
+  color: rgb(232 226 210 / 0.4);
+}
+
+/* The stack of record cards on the desk.
+ *
+ * The track minimum is capped at the container width. --index-min is in rem,
+ * so a reader who has turned their text up to 24px would otherwise demand a
+ * 432px column inside a 375px phone, and the whole page would scroll
+ * sideways. min() makes the column give way instead. */
+.stack {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--index-min), 100%), 1fr));
+  gap: var(--gap);
+  max-width: 76rem;
+  margin: 0 auto;
+  align-items: start;
+}
+
+/* An empty drawer states what it holds and invites the first entry. */
+.empty {
+  max-width: var(--card-width-slip);
+  margin: 0 auto;
+  text-align: center;
+  color: rgb(232 226 210 / 0.66);
+}
+
+.empty__line {
+  font-size: var(--size-body);
+}
+
+.empty__action {
+  margin-top: var(--gap);
+}
+
+/* A screen that is still loading says so rather than flashing an empty
+   drawer, which reads as "you own nothing". */
+.waiting {
+  max-width: 76rem;
+  margin: 0 auto;
+  font-size: var(--size-micro);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: rgb(232 226 210 / 0.4);
+}

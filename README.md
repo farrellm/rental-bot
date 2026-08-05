@@ -14,25 +14,31 @@ plan.
 
 ## Status
 
-**M0** — skeleton, migrations, config, health endpoints. The process boots,
-migrates, serves, and reports on itself; there is no application behaviour yet.
+**M1** — auth, properties and units CRUD. You can sign in, put properties on
+file with their units, and amend them. Documents, transactions, and the email
+ingestion the product exists for arrive with M2 onward.
 
 ## Requirements
 
 Go 1.26 or newer, and Node 20 or newer to build the frontend. Nothing else —
 the SQLite driver is pure Go, so the binary is static and cross-compiles
-cleanly. `sqlite3` and `staticcheck` are optional; the targets that use them
-say so when they are missing.
+cleanly. `sqlite3`, `staticcheck`, and `sqlc` are optional; the targets that use
+them say so when they are missing. The sqlc-generated query layer is committed,
+so only someone changing a query needs the tool.
 
 ## Quick start
 
 ```sh
-make dev        # API on :8080, Vite on :5174, hot reload
-make build      # bin/rental-bot, with the SPA embedded
-make check      # everything a commit has to pass
+make build                          # bin/rental-bot, with the SPA embedded
+./bin/rental-bot -create-user alice # prompts for a password, twice
+make dev                            # API on :8080, Vite on :5174, hot reload
 ```
 
-Then open <http://localhost:5174>.
+Then open <http://localhost:5174> and sign in.
+
+There is no registration endpoint and no first-run setup screen: an instance
+that is reachable before you have finished setting it up cannot be claimed by
+whoever finds it first. Users come from `-create-user` and nowhere else.
 
 ## Make targets
 
@@ -62,6 +68,13 @@ doing its job. Add a new `NNNN_` file instead.
 | `make run` | `make build`, then runs the result against `$(CONFIG)`. |
 | `make migrate` | Applies pending migrations and exits. Idempotent — a second run applies nothing. |
 
+`./bin/rental-bot -create-user <name>` creates that user, or resets their
+password if they already exist — which also ends every session they had. It
+prompts twice with the echo off, or reads `RENTAL_BOT_ADMIN_PASSWORD` when
+stdin is not a terminal. Passwords are at least twelve characters: this is
+designed to be reachable from the internet and TOTP is still deferred, so the
+password is the only thing between a stranger and the ledger.
+
 Version, commit, and build date are stamped in through `-ldflags`, so
 `./bin/rental-bot -version` and the status card report the real build rather
 than `dev`.
@@ -77,6 +90,7 @@ than `dev`.
 | `make fmt-check` | Fails, listing files, if anything is unformatted. Does not modify anything. |
 | `make vet` | `go vet ./...`. |
 | `make lint` | Runs `staticcheck` when it is installed, and says so when it is not. |
+| `make generate` | Regenerates the sqlc query layer when `sqlc` is installed. Run it after changing a migration or a file in `internal/store/queries`. |
 
 ### Frontend
 
@@ -141,9 +155,26 @@ encrypted columns comes from `RENTAL_BOT_SECRET_KEY`, or from a file named by
 | `GET /healthz` | The process is alive. Touches nothing else, so a database blip cannot trigger a restart loop. |
 | `GET /readyz` | The process can serve traffic. `503` with per-check detail when it cannot. |
 | `GET /api/v1/status` | Build identity, uptime, schema state, applied migrations, and the checks. Answers `200` even while degraded — the condition is in the body. |
-| `GET /` | The record-of-service card. |
+| `GET /` | The single-page app. |
 
-Errors are RFC 7807 `application/problem+json`, always.
+`/healthz` and `/readyz` are open, because a process manager has no session.
+Everything under `/api/v1` needs one, except signing in:
+
+| Path | Purpose |
+| --- | --- |
+| `POST /api/v1/auth/login` | Sets the session and CSRF cookies. |
+| `POST /api/v1/auth/logout` | Ends the session and clears both. |
+| `GET /api/v1/auth/me` | The signed-in operator; also reissues the CSRF cookie. |
+| `GET/POST /api/v1/properties` | List (keyset pagination) and create. |
+| `GET/PATCH/DELETE /api/v1/properties/{id}` | One property, with its units inline. |
+| `GET/POST /api/v1/properties/{id}/units` | The units of one property. |
+| `PATCH/DELETE /api/v1/units/{id}` | One unit. Deleting the last one is a `409`. |
+
+Errors are RFC 7807 `application/problem+json`, always, including `405`s.
+
+Mutating requests carry the `rb_csrf` cookie's value in an `X-CSRF-Token`
+header. A `PATCH` distinguishes three states per field: absent leaves the
+column alone, `null` clears it, a value sets it.
 
 ## License
 

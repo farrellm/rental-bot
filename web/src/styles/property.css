@@ -1,0 +1,225 @@
+/*
+ * Properties: the stack of index cards, and the record card you amend.
+ *
+ * An index card is the same stock as a record card, cut smaller. It carries
+ * only what you need to pick one out of a drawer — the name, where it is, how
+ * many units, and its standing.
+ */
+
+/* The index card ----------------------------------------------------------- */
+
+.card--index {
+  display: block;
+  max-width: none; /* the grid cell sizes it, not the record width */
+  color: inherit;
+  text-decoration: none;
+}
+
+.card--index:hover,
+.card--index:focus-visible {
+  border-color: var(--verdigris);
+}
+
+.index__head {
+  /* Flex siblings, so a long nickname and the file number reserve their own
+     space instead of one being laid over the other. */
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-tight);
+
+  padding: var(--gap-tight) var(--gap-tight) var(--gap-hair);
+}
+
+.index__name {
+  /* A flex item's automatic minimum is its min-content width, so a long
+     unbroken nickname would push the card wider than its cell without this. */
+  min-width: 0;
+  font-size: var(--size-lead);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: var(--track-mark);
+  text-transform: uppercase;
+  color: var(--graphite);
+  overflow-wrap: anywhere;
+}
+
+.index__no {
+  flex: 0 0 auto;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  white-space: nowrap;
+}
+
+.index__address {
+  padding: 0 var(--gap-tight) var(--gap-tight);
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+}
+
+.index__foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--gap-tight);
+
+  padding: var(--gap-tight);
+  border-top: var(--rule);
+}
+
+.index__units {
+  min-width: 0;
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+}
+
+/* The record card ---------------------------------------------------------- */
+
+/* The address under the nickname, in the head band. */
+.record__address {
+  margin-top: var(--gap-hair);
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+}
+
+/* Units -------------------------------------------------------------------- */
+
+/* The unit list is a band of its own between the fields and the foot: it is
+   part of the record, not a footnote to it. */
+.units {
+  padding: var(--gap-band);
+  border-top: var(--rule);
+}
+
+.units__eyebrow {
+  font-size: var(--size-micro);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--muted-ink);
+}
+
+.units__list {
+  margin-top: var(--gap-tight);
+}
+
+.unit {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+
+  padding: 0.5rem 0;
+  border-bottom: 1px dashed var(--card-rule);
+}
+
+.unit:last-child {
+  border-bottom: none;
+}
+
+.unit__label {
+  min-width: 0;
+  flex: 1 1 8rem;
+  font-size: var(--size-body);
+  color: var(--graphite);
+  overflow-wrap: anywhere;
+}
+
+.unit__facts {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+}
+
+/* A unit being amended: the label and its three measures on ruled lines,
+   wrapping rather than shrinking below legibility. */
+.unit--editing {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gap-hair);
+  align-items: start;
+}
+
+.unit__entries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-hair);
+}
+
+.unit__entries > * {
+  flex: 1 1 5rem;
+  min-width: 0;
+}
+
+.unit__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.units__add {
+  margin-top: var(--gap-tight);
+}
+
+.units__empty {
+  margin-top: var(--gap-tight);
+  font-size: var(--size-small);
+  color: var(--amber);
+}
+
+/* The foot of a record carries its stamp and the actions that change it. */
+.record__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  flex-wrap: wrap;
+
+  padding: var(--gap-band);
+  border-top: var(--rule);
+}
+
+.record__foot .actions {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.record__foot .stamp {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Narrow ------------------------------------------------------------------- */
+
+@media (max-width: 40rem) {
+  /* The stamp goes under the actions rather than beside them, and relaxes its
+     tilt the way it does everywhere else when stacked. */
+  .record__foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .record__foot .stamp {
+    align-self: center;
+    margin-top: var(--gap-tight);
+    transform: rotate(-3deg);
+  }
+
+  .unit {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.125rem;
+  }
+
+  /* flex-basis sizes the main axis, which is now the vertical one: leaving
+     the row's `flex: 1 1 8rem` in place would make the label 8rem tall and
+     strand its measures at the bottom of the gap. */
+  .unit__label,
+  .unit__facts {
+    flex: 0 0 auto;
+  }
+}

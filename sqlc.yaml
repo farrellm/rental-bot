@@ -1,0 +1,32 @@
+# sqlc generates the query layer from migrations/ and internal/store/queries/.
+#
+# The generated code is committed, so a fresh clone builds and `make check`
+# runs without sqlc installed. `make generate` regenerates it and skips with an
+# install hint when the tool is absent, the same way `make lint` treats
+# staticcheck. Regenerate whenever a migration or a query file changes.
+version: "2"
+sql:
+  - engine: "sqlite"
+    schema: "migrations"
+    queries: "internal/store/queries"
+    gen:
+      go:
+        package: "sqlc"
+        out: "internal/store/sqlc"
+        # A nullable column becomes *T rather than sql.NullT, so a PATCH that
+        # clears a field and a PATCH that omits it stay distinguishable all the
+        # way down to the write.
+        emit_pointers_for_null_types: true
+        # A query that matched nothing returns [] rather than nil, so the JSON
+        # is an empty array instead of null.
+        emit_empty_slices: true
+        overrides:
+          # Money is domain.Money in the database, in Go, and on the wire
+          # (docs/DESIGN.md §3). The override keeps that true at the store
+          # boundary rather than converting an int64 back into it by hand at
+          # every call site.
+          - column: "properties.purchase_price_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
