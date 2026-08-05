@@ -269,7 +269,9 @@
   margin-top: 0.35rem;
   padding-top: 0.3rem;
   border-top: 1px solid currentcolor;
-  font-size: 0.625rem;
+  /* 11px, the floor. It was 10px, which is below what this product asks of
+     itself and reads as a smudge on a phone. */
+  font-size: var(--size-micro);
   letter-spacing: 0.08em;
 }
 

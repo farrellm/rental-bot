@@ -24,6 +24,12 @@
 }
 
 .shell__mark {
+  /* The wordmark is a link home, so it answers to the tap-target floor like
+     every other control. Its cap height is 16px; the box around it is not. */
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-min);
+
   /* min-width: 0 before anything constrains it, because a flex item's
      automatic minimum is its min-content width and "RENTAL-BOT" will not
      break on its own. */
@@ -130,10 +136,15 @@
   color: rgb(232 226 210 / 0.4);
 }
 
-/* The stack of record cards on the desk. */
+/* The stack of record cards on the desk.
+ *
+ * The track minimum is capped at the container width. --index-min is in rem,
+ * so a reader who has turned their text up to 24px would otherwise demand a
+ * 432px column inside a 375px phone, and the whole page would scroll
+ * sideways. min() makes the column give way instead. */
 .stack {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--index-min), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--index-min), 100%), 1fr));
   gap: var(--gap);
   max-width: 76rem;
   margin: 0 auto;

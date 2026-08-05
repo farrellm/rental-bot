@@ -214,4 +214,12 @@
     align-items: stretch;
     gap: 0.125rem;
   }
+
+  /* flex-basis sizes the main axis, which is now the vertical one: leaving
+     the row's `flex: 1 1 8rem` in place would make the label 8rem tall and
+     strand its measures at the bottom of the gap. */
+  .unit__label,
+  .unit__facts {
+    flex: 0 0 auto;
+  }
 }
