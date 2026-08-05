@@ -189,6 +189,19 @@
   animation: stamp-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
 
+/* The admittance slip: two entries and a word, so it is cut narrower than a
+   full record card. */
+.card--slip {
+  max-width: var(--card-width-slip);
+}
+
+/* On the slip the label column would swallow a 24rem card, so the entries
+   stack under their labels at every width. */
+.card--slip .field {
+  grid-template-columns: 1fr;
+  gap: var(--gap-hair);
+}
+
 /* The inner rule of a two-ring stamp. */
 .stamp::before {
   content: "";
@@ -198,12 +211,48 @@
   border-radius: 2px;
 }
 
+/* Every variant is one declaration, because the border, the inner ring, and
+   the divider all take currentcolor. */
+
 .stamp--degraded {
   color: var(--amber);
 }
 
 .stamp--no-contact {
   color: var(--oxide);
+}
+
+/* A property in service reads the same as a process in service. */
+.stamp--active {
+  color: var(--verdigris);
+}
+
+/* Provisional: a property you are looking at, not one you hold. */
+.stamp--prospect {
+  color: var(--amber);
+}
+
+/* History rather than fault, so it goes quiet instead of loud. */
+.stamp--sold {
+  color: var(--muted-ink);
+}
+
+/* The card is open and what it says is not yet the record. */
+.stamp--amending {
+  color: var(--amber);
+}
+
+.stamp--refused {
+  color: var(--oxide);
+}
+
+/* On an index card, where the stamp marks a record rather than heading one. */
+.stamp--small {
+  padding: 0.3rem 0.7rem 0.28rem;
+}
+
+.stamp--small .stamp__word {
+  font-size: var(--size-small);
 }
 
 .stamp__word {

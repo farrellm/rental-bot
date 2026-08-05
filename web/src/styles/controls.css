@@ -1,0 +1,230 @@
+/*
+ * Controls.
+ *
+ * On a record card the labels are pre-printed and the values are typed in
+ * afterward, so an entry field is not a box. It is a typed value sitting on
+ * the same ruled line the read-only value sits on: same face, same size, same
+ * baseline, same row. That is why amending a card in place costs no reflow —
+ * reading and writing are the same geometry.
+ *
+ * Buttons are ink on stock: a rule and a word, never a filled rectangle.
+ * Paper does not have those, and one filled button would undo the illusion the
+ * whole card is built on.
+ */
+
+/* Entries ------------------------------------------------------------------ */
+
+.entry {
+  width: 100%;
+  /* A flex or grid item will not go below its min-content width without
+     this, and a long unbroken value would push the row wider than the card. */
+  min-width: 0;
+  min-height: var(--control-min);
+  padding: 0 0.3rem;
+  margin: 0;
+
+  font-family: var(--face-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--size-body);
+  color: var(--graphite);
+
+  /* No fill. An entry is a typed value sitting on the printed rule, and a
+     filled rectangle would turn the card back into a web form. */
+  background: none;
+  border: none;
+  /* The rule itself, drawn a shade darker than the card's own hairlines so it
+     reads as a line to write on rather than a divider. */
+  border-bottom: 1px solid var(--muted-ink);
+  border-radius: 0;
+  appearance: none;
+}
+
+.entry::placeholder {
+  color: var(--muted-ink);
+  opacity: 0.7;
+}
+
+.entry:focus-visible {
+  /* The global focus ring in base.css still applies; this is the pen finding
+     the line, not a replacement for it. */
+  background: var(--verdigris-wash);
+  border-bottom-color: var(--verdigris);
+}
+
+/* A field whose value is an entry does not draw its own rule: the entry
+   brings one, and two stacked hairlines read as a mistake. */
+.field--entry {
+  border-bottom: none;
+}
+
+.entry:disabled {
+  color: var(--muted-ink);
+  background: none;
+  cursor: not-allowed;
+}
+
+.entry--invalid {
+  border-bottom-color: var(--oxide);
+  background: var(--oxide-wash);
+}
+
+textarea.entry {
+  min-height: calc(var(--control-min) * 2);
+  padding: 0.5rem 0.3rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+select.entry {
+  font-family: var(--face-display);
+  font-size: var(--size-body);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* A short entry that should not stretch across a whole row: a year, a bath
+   count. It still meets the tap-target floor. */
+.entry--short {
+  max-width: 9rem;
+}
+
+/* Two or three entries sharing one ruled row, for values that read together:
+   city / state / postal. They wrap rather than shrink below legibility. */
+.entry-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-hair);
+}
+
+.entry-group > * {
+  flex: 1 1 6rem;
+  min-width: 0;
+}
+
+/* Buttons ------------------------------------------------------------------ */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-hair);
+
+  min-height: var(--control-min);
+  padding: 0 var(--gap-tight);
+
+  font-family: var(--face-display);
+  font-size: var(--size-micro);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+
+  color: var(--graphite);
+  background: none;
+  border: 1px solid currentcolor;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--ink-wash);
+}
+
+.button:disabled {
+  color: var(--muted-ink);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+/* The one action a screen exists for. It carries the operational colour, so
+   the affirmative act and the healthy state read as the same idea. */
+.button--primary {
+  color: var(--verdigris);
+}
+
+.button--primary:hover:not(:disabled) {
+  background: var(--verdigris-wash);
+}
+
+/* Anything that destroys a record. */
+.button--danger {
+  color: var(--oxide);
+}
+
+.button--danger:hover:not(:disabled) {
+  background: var(--oxide-wash);
+}
+
+/* A button standing on the ground rather than on stock, in the band or over
+   an empty drawer. */
+.button--ground {
+  color: rgb(232 226 210 / 0.8);
+}
+
+.button--ground:hover:not(:disabled) {
+  color: var(--card);
+  background: rgb(232 226 210 / 0.08);
+}
+
+.button--block {
+  width: 100%;
+}
+
+/* A row of actions. It wraps rather than letting a button shrink below its
+   label, and stays right-aligned where there is room. */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-tight);
+  align-items: center;
+}
+
+.actions--end {
+  justify-content: flex-end;
+}
+
+/* Notices ------------------------------------------------------------------ */
+
+/* A message about what just happened, on the card, above the fields. The
+   fault tone reuses the card's own notice band. */
+.notice {
+  padding: var(--gap-tight) var(--gap-band);
+  border-bottom: var(--rule);
+  font-size: var(--size-small);
+}
+
+.notice--fault {
+  background: var(--oxide-wash);
+  color: var(--oxide);
+}
+
+.notice--working {
+  background: var(--ink-wash);
+  color: var(--muted-ink);
+}
+
+/* The hint under an entry: what this field is for, or why it was refused. */
+.hint {
+  margin-top: var(--gap-hair);
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+.hint--fault {
+  color: var(--oxide);
+}
+
+/* Screen-reader-only text, for labels a sighted reader gets from position. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

@@ -1,17 +1,40 @@
 import { clock } from "../format";
 
-export type StampState = "operational" | "degraded" | "no-contact";
+/**
+ * Every state this application stamps onto a card.
+ *
+ * The stamp began as a health indicator and is now the state machine for the
+ * whole product: a service reading, a property's standing, a card open for
+ * amendment, a refused sign-in. One component, one vocabulary, and a reader
+ * who learns to look in the same corner on every screen.
+ */
+export type StampState =
+  | "operational"
+  | "degraded"
+  | "no-contact"
+  | "active"
+  | "prospect"
+  | "sold"
+  | "amending"
+  | "refused";
 
 const WORD: Record<StampState, string> = {
   operational: "Operational",
   degraded: "Degraded",
   "no-contact": "No contact",
+  active: "Active",
+  prospect: "Prospect",
+  sold: "Sold",
+  amending: "Amending",
+  refused: "Refused",
 };
 
 interface Props {
   state: StampState;
-  /** RFC3339 timestamp of the reading this stamp records. */
-  at: string;
+  /** RFC3339 timestamp of the reading this stamp records, where there is one. */
+  at?: string;
+  /** Renders the stamp smaller, for an index card rather than a full record. */
+  small?: boolean;
 }
 
 /**
@@ -21,11 +44,14 @@ interface Props {
  * colour, so the state survives both a screen reader and a monochrome
  * screenshot.
  */
-export function Stamp({ state, at }: Props) {
+export function Stamp({ state, at, small }: Props) {
+  const classes = ["stamp", `stamp--${state}`];
+  if (small) classes.push("stamp--small");
+
   return (
-    <div className={`stamp stamp--${state}`} role="status" aria-live="polite">
+    <div className={classes.join(" ")} role="status" aria-live="polite">
       <span className="stamp__word stamped">{WORD[state]}</span>
-      <span className="stamp__at mono">{clock(at)}</span>
+      {at && <span className="stamp__at mono">{clock(at)}</span>}
     </div>
   );
 }
