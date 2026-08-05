@@ -2,6 +2,7 @@
 /bin/
 /web/dist/
 /web/node_modules/
+/web/.vite/
 
 # Local runtime state
 /data/
