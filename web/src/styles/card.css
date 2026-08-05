@@ -6,17 +6,25 @@
  * thing on this page that moves.
  */
 
-.card {
-  position: relative;
-  width: 100%;
-  max-width: var(--card-width);
-
+/* The stock itself: colour and tooth, with no edges.
+ *
+ * A card is stock plus a cut edge and a shadow. A divider tab is stock with
+ * three edges, cut from the same sheet — which is why this is its own class
+ * rather than lines repeated in tabs.css. The tooth has to match exactly or
+ * the joint between a tab and its card is visible. */
+.stock {
   color: var(--graphite);
   background-color: var(--card);
   /* Paper tooth: a cross-hatch far too faint to read as a pattern. */
   background-image:
     repeating-linear-gradient(90deg, rgb(34 49 47 / 0.018) 0 1px, transparent 1px 3px),
     repeating-linear-gradient(0deg, rgb(34 49 47 / 0.012) 0 1px, transparent 1px 4px);
+}
+
+.card {
+  position: relative;
+  width: 100%;
+  max-width: var(--card-width);
 
   border: var(--rule);
   border-radius: var(--radius);

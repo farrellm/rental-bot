@@ -4,7 +4,9 @@ import { AppShell } from "./AppShell";
 import { ApiError } from "./api/client";
 import { useMe } from "./api/queries";
 import { Properties } from "./screens/Properties";
-import { PropertyDetail } from "./screens/PropertyDetail";
+import { PropertyRecord } from "./screens/PropertyRecord";
+import { CashFlow } from "./screens/property/CashFlow";
+import { Overview } from "./screens/property/Overview";
 import { Service } from "./screens/Service";
 import { SignIn } from "./screens/SignIn";
 
@@ -48,8 +50,15 @@ export function AppRoutes() {
 
       <Route element={<RequireSession />}>
         <Route path="/properties" element={<Properties />} />
-        {/* "new" is a property that does not exist yet, on the same card. */}
-        <Route path="/properties/:id" element={<PropertyDetail />} />
+        {/* A property that does not exist yet has nothing to hang tabs off,
+            so it gets the Overview card alone. */}
+        <Route path="/properties/new" element={<PropertyRecord isNew />} />
+        {/* Sections are their own routes, so a link can name one. M4's review
+            deep links will want exactly that. */}
+        <Route path="/properties/:id" element={<PropertyRecord />}>
+          <Route index element={<Overview />} />
+          <Route path="cash-flow" element={<CashFlow />} />
+        </Route>
         <Route path="/service" element={<Service />} />
         <Route path="/" element={<Navigate to="/properties" replace />} />
       </Route>

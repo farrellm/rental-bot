@@ -73,6 +73,15 @@ export interface Unit {
   sqft: number | null;
   created_at: string;
   updated_at: string;
+  /**
+   * The lease holding this unit today, or null when nothing is.
+   *
+   * Derived by the server from the lease dates on every read, never stored.
+   * It is an id rather than a boolean so a screen can link to the reason for
+   * the answer instead of just asserting it.
+   */
+  active_lease_id?: number | null;
+  active_lease_end_date?: string | null;
 }
 
 export interface UnitList {
@@ -141,4 +150,257 @@ export interface Status {
   checks: Check[];
   migrations: Migration[];
   checked_at: string;
+}
+
+/* Documents ---------------------------------------------------------------- */
+
+export type DocumentKind =
+  | "lease"
+  | "insurance"
+  | "receipt"
+  | "statement"
+  | "tax"
+  | "photo"
+  | "correspondence"
+  | "other";
+
+/** What a document can be filed against. Mirrors the CHECK in migration 0002. */
+export type LinkEntityType =
+  | "property"
+  | "unit"
+  | "transaction"
+  | "repair"
+  | "repair_event"
+  | "lease"
+  | "tenant"
+  | "vendor";
+
+export interface DocumentLink {
+  entity_type: LinkEntityType;
+  entity_id: number;
+}
+
+export interface Document {
+  id: number;
+  property_id: number | null;
+  kind: DocumentKind;
+  title: string;
+  original_filename: string;
+  mime: string;
+  size_bytes: number;
+  /** The content's own name. Its first bytes are the accession number. */
+  sha256: string;
+  uploaded_by: number | null;
+  created_at: string;
+  updated_at: string;
+  /** Present on one document, absent from a list. */
+  links?: DocumentLink[];
+}
+
+/** An upload result: `deduplicated` means these bytes were already on file. */
+export interface UploadedDocument extends Document {
+  deduplicated: boolean;
+}
+
+export interface DocumentPage {
+  items: Document[];
+  next_cursor?: string;
+}
+
+/* The ledger --------------------------------------------------------------- */
+
+export type TransactionCategory =
+  | "rent_income"
+  | "other_income"
+  | "mortgage_payment"
+  | "insurance"
+  | "property_tax"
+  | "hoa"
+  | "mgmt_fee"
+  | "repair"
+  | "capex"
+  | "utilities"
+  | "legal"
+  | "other";
+
+export interface Transaction {
+  id: number;
+  property_id: number;
+  occurred_on: string;
+  /** Whole cents, signed: income positive, expense negative. */
+  amount_cents: number;
+  category: TransactionCategory;
+  description: string;
+  counterparty: string;
+  payment_method: string;
+  unit_id: number | null;
+  lease_id: number | null;
+  repair_id: number | null;
+  vendor_id: number | null;
+  document_id: number | null;
+  source: "manual" | "email" | "import";
+  needs_review: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** The foot of the ledger sheet, computed by the server over the filtered set. */
+export interface LedgerTotals {
+  income_cents: number;
+  expense_cents: number;
+  net_cents: number;
+  entry_count: number;
+}
+
+export interface TransactionPage {
+  items: Transaction[];
+  totals: LedgerTotals;
+  next_cursor?: string;
+}
+
+export interface TransactionWrite {
+  occurred_on?: string;
+  amount_cents?: number;
+  category?: TransactionCategory;
+  description?: string;
+  counterparty?: string;
+  payment_method?: string;
+  unit_id?: number | null;
+  vendor_id?: number | null;
+  repair_id?: number | null;
+  document_id?: number | null;
+  needs_review?: boolean;
+}
+
+/* Repairs ------------------------------------------------------------------ */
+
+export type RepairStatus = "open" | "scheduled" | "in_progress" | "done" | "wontfix";
+
+export interface RepairEvent {
+  id: number;
+  repair_id: number;
+  /** RFC3339: when it happened, not when it was written down. */
+  at: string;
+  note: string;
+  document_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Repair {
+  id: number;
+  property_id: number;
+  unit_id: number | null;
+  opened_on: string;
+  closed_on: string | null;
+  status: RepairStatus;
+  category: string;
+  vendor_id: number | null;
+  description: string;
+  estimate_cents: number | null;
+  actual_cents: number | null;
+  is_capex: boolean;
+  warranty_until: string | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  /** Present on one repair, absent from a list. */
+  events?: RepairEvent[];
+}
+
+export interface RepairList {
+  items: Repair[];
+}
+
+export interface RepairWrite {
+  unit_id?: number | null;
+  opened_on?: string;
+  closed_on?: string | null;
+  status?: RepairStatus;
+  category?: string;
+  vendor_id?: number | null;
+  description?: string;
+  estimate_cents?: number | null;
+  actual_cents?: number | null;
+  is_capex?: boolean;
+  warranty_until?: string | null;
+  notes?: string;
+}
+
+/* Tenancy ------------------------------------------------------------------ */
+
+export type LeaseStatus = "pending" | "active" | "ended" | "terminated";
+export type TenantRole = "primary" | "cosigner" | "occupant";
+
+export interface Tenant {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantList {
+  items: Tenant[];
+}
+
+export interface LeaseTenant extends Tenant {
+  role: TenantRole;
+}
+
+export interface Lease {
+  id: number;
+  unit_id: number;
+  unit_label: string;
+  start_date: string;
+  /** Null is month-to-month, not a missing value. */
+  end_date: string | null;
+  rent_cents: number;
+  deposit_cents: number | null;
+  due_day: number | null;
+  late_fee_cents: number | null;
+  status: LeaseStatus;
+  renewal_of_lease_id: number | null;
+  document_id: number | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  /** Present on one lease, absent from a list. */
+  tenants?: LeaseTenant[];
+}
+
+export interface LeaseList {
+  items: Lease[];
+}
+
+export interface LeaseWrite {
+  unit_id?: number;
+  start_date?: string;
+  end_date?: string | null;
+  rent_cents?: number;
+  deposit_cents?: number | null;
+  due_day?: number | null;
+  late_fee_cents?: number | null;
+  status?: LeaseStatus;
+  document_id?: number | null;
+  notes?: string;
+}
+
+/* Vendors ------------------------------------------------------------------ */
+
+export interface Vendor {
+  id: number;
+  name: string;
+  trade: string;
+  phone: string;
+  email: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VendorList {
+  items: Vendor[];
 }

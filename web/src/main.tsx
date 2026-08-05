@@ -15,6 +15,8 @@ import "./styles/card.css";
 import "./styles/shell.css";
 import "./styles/controls.css";
 import "./styles/property.css";
+import "./styles/tabs.css";
+import "./styles/ledger.css";
 
 import { AppRoutes } from "./routes";
 import { ApiError } from "./api/client";
