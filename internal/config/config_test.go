@@ -35,6 +35,7 @@ format = "json"
 	// The environment wins over the file; the file wins over defaults.
 	t.Setenv(envPrefix+"SERVER_ADDR", ":7777")
 	t.Setenv(envPrefix+"DATABASE_READ_POOL_SIZE", "2")
+	t.Setenv(envPrefix+"STORAGE_MAX_UPLOAD_BYTES", "1048576")
 
 	cfg, err := Load(path)
 	if err != nil {
@@ -51,6 +52,7 @@ format = "json"
 		{"Database.ReadPoolSize (env)", cfg.Database.ReadPoolSize, 2},
 		{"Log.Level (file)", cfg.Log.Level, "debug"},
 		{"Storage.Blobs (default)", cfg.Storage.Blobs, Default().Storage.Blobs},
+		{"Storage.MaxUploadBytes (env)", cfg.Storage.MaxUploadBytes, int64(1 << 20)},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {
@@ -69,6 +71,8 @@ func TestLoadRejectsBadValues(t *testing.T) {
 		{"empty listen address", map[string]string{"SERVER_ADDR": ""}},
 		{"zero read pool", map[string]string{"DATABASE_READ_POOL_SIZE": "0"}},
 		{"non-numeric read pool", map[string]string{"DATABASE_READ_POOL_SIZE": "four"}},
+		{"zero upload cap", map[string]string{"STORAGE_MAX_UPLOAD_BYTES": "0"}},
+		{"non-numeric upload cap", map[string]string{"STORAGE_MAX_UPLOAD_BYTES": "25MB"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
