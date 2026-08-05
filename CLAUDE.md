@@ -148,6 +148,10 @@ What has to hold at every width:
   what broke the ledger against the stamp at 660px.
 - Text stays legible: no tap target or control below 44px, and no body text
   below 11px.
+- No form control under 16px on a touch device. Safari auto-zooms the viewport
+  when it focuses one and never restores the scale. `--size-body` goes to 1rem
+  under `(pointer: coarse)` in `tokens.css`, which moves the read value with
+  the entry so amending still costs no reflow.
 - Layout survives inflated type. A flex item needs `min-width: 0` before
   `max-width` will constrain it, because the automatic minimum is the
   min-content width and a long word will not break on its own.

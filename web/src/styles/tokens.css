@@ -66,3 +66,14 @@
   --lift: 0 18px 40px -20px rgb(0 0 0 / 0.75), 0 2px 4px rgb(0 0 0 / 0.35);
   --stamp-turn: -7deg;
 }
+
+/* Safari on iOS zooms the viewport when a form control it is focusing carries
+   text under 16px, and it does not zoom back out afterwards. So on a touch
+   device the value size is 16px — not the entry alone, because a read value
+   and its entry share one row geometry and amending a card in place has to
+   cost no reflow. */
+@media (hover: none) and (pointer: coarse) {
+  :root {
+    --size-body: 1rem; /* 16px */
+  }
+}
