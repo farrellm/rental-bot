@@ -19,8 +19,8 @@ NPM := npm --prefix web
 
 .DEFAULT_GOAL := help
 .PHONY: help dev dev-api dev-web watch watch-dev build run migrate test test-web \
-        fmt fmt-check vet lint check tidy web-deps web-install web-build \
-        web-clean clean db-shell
+        fmt fmt-check vet lint check generate tidy web-deps web-install \
+        web-build web-clean clean db-shell
 
 help: ## List the targets
 	@grep -hE '^[a-z][a-z-]*:.*?## ' $(MAKEFILE_LIST) \
@@ -85,6 +85,17 @@ lint: ## Run staticcheck when it is installed
 		staticcheck ./...; \
 	else \
 		echo "staticcheck not installed; skipping (go install honnef.co/go/tools/cmd/staticcheck@latest)"; \
+	fi
+
+## Codegen -------------------------------------------------------------------
+
+# The generated query layer is committed, so `make check` and a fresh clone
+# never need sqlc. Run this after changing a migration or a query file.
+generate: ## Regenerate the sqlc query layer when sqlc is installed
+	@if command -v sqlc >/dev/null 2>&1; then \
+		sqlc generate && echo "regenerated internal/store/sqlc"; \
+	else \
+		echo "sqlc not installed; skipping (go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest)"; \
 	fi
 
 ## Frontend ------------------------------------------------------------------
