@@ -130,6 +130,73 @@ func (q *Queries) ListUnitsByProperty(ctx context.Context, propertyID int64) ([]
 	return items, nil
 }
 
+const listUnitsWithOccupancy = `-- name: ListUnitsWithOccupancy :many
+SELECT
+    units.id, units.property_id, units.label, units.beds, units.baths, units.sqft, units.created_at, units.updated_at,
+    leases.id AS active_lease_id,
+    leases.end_date AS active_lease_end_date
+FROM units
+LEFT JOIN leases ON leases.unit_id = units.id
+    AND leases.status = 'active'
+    AND leases.start_date <= ?1
+    AND (leases.end_date IS NULL OR leases.end_date >= ?1)
+WHERE units.property_id = ?2
+ORDER BY units.label, units.id
+`
+
+type ListUnitsWithOccupancyParams struct {
+	Today      string
+	PropertyID int64
+}
+
+type ListUnitsWithOccupancyRow struct {
+	Unit               Unit
+	ActiveLeaseID      *int64
+	ActiveLeaseEndDate *string
+}
+
+// Occupancy is derived, never stored (DESIGN.md 3.2): a unit is occupied if it
+// has an active lease covering today. There is no is_occupied column to drift
+// out of sync with the leases that are the actual evidence, so the answer is
+// recomputed on every read from the dates themselves.
+//
+// The join carries the lease id rather than a flag, so the screen can link to
+// the lease that is the reason for the answer. It is a LEFT JOIN because most
+// units on most days have no active lease, and that is not a missing row.
+func (q *Queries) ListUnitsWithOccupancy(ctx context.Context, arg ListUnitsWithOccupancyParams) ([]ListUnitsWithOccupancyRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUnitsWithOccupancy, arg.Today, arg.PropertyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUnitsWithOccupancyRow{}
+	for rows.Next() {
+		var i ListUnitsWithOccupancyRow
+		if err := rows.Scan(
+			&i.Unit.ID,
+			&i.Unit.PropertyID,
+			&i.Unit.Label,
+			&i.Unit.Beds,
+			&i.Unit.Baths,
+			&i.Unit.Sqft,
+			&i.Unit.CreatedAt,
+			&i.Unit.UpdatedAt,
+			&i.ActiveLeaseID,
+			&i.ActiveLeaseEndDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateUnit = `-- name: UpdateUnit :one
 UPDATE units SET
     label      = ?,

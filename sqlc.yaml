@@ -25,7 +25,39 @@ sql:
           # (docs/DESIGN.md §3). The override keeps that true at the store
           # boundary rather than converting an int64 back into it by hand at
           # every call site.
+          #
+          # pointer follows nullability: a nullable money column stays *Money so
+          # "unknown" and "zero" remain different claims, and a NOT NULL one is
+          # a plain Money that no call site has to dereference.
           - column: "properties.purchase_price_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "transactions.amount_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+          - column: "repairs.estimate_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "repairs.actual_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "leases.rent_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+          - column: "leases.deposit_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "leases.late_fee_cents"
             go_type:
               import: "github.com/farrellm/rental-bot/internal/domain"
               type: "Money"
