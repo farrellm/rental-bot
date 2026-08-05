@@ -44,10 +44,11 @@
   opacity: 0.7;
 }
 
+/* The focus ring from base.css is the indicator. Adding a fill underneath it
+   would draw exactly the box this design spent its entries avoiding, at the
+   one moment the operator is looking straight at it. The rule going verdigris
+   is enough of a second signal. */
 .entry:focus-visible {
-  /* The global focus ring in base.css still applies; this is the pen finding
-     the line, not a replacement for it. */
-  background: var(--verdigris-wash);
   border-bottom-color: var(--verdigris);
 }
 
@@ -55,6 +56,16 @@
    brings one, and two stacked hairlines read as a mistake. */
 .field--entry {
   border-bottom: none;
+}
+
+/* A multi-line entry is taller than its label, and baseline alignment would
+   drop the label to the last line of the textarea. */
+.field--block {
+  align-items: start;
+}
+
+.field--block .field__label {
+  padding-top: 0.7rem;
 }
 
 .entry:disabled {

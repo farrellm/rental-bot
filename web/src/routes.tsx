@@ -3,6 +3,8 @@ import { Navigate, Route, Routes } from "react-router";
 import { AppShell } from "./AppShell";
 import { ApiError } from "./api/client";
 import { useMe } from "./api/queries";
+import { Properties } from "./screens/Properties";
+import { PropertyDetail } from "./screens/PropertyDetail";
 import { Service } from "./screens/Service";
 import { SignIn } from "./screens/SignIn";
 
@@ -45,13 +47,16 @@ export function AppRoutes() {
       <Route path="/sign-in" element={<SignIn />} />
 
       <Route element={<RequireSession />}>
+        <Route path="/properties" element={<Properties />} />
+        {/* "new" is a property that does not exist yet, on the same card. */}
+        <Route path="/properties/:id" element={<PropertyDetail />} />
         <Route path="/service" element={<Service />} />
-        <Route path="/" element={<Navigate to="/service" replace />} />
+        <Route path="/" element={<Navigate to="/properties" replace />} />
       </Route>
 
       {/* The SPA fallback serves index.html for any path, so an unknown one
           lands here rather than at the server. */}
-      <Route path="*" element={<Navigate to="/service" replace />} />
+      <Route path="*" element={<Navigate to="/properties" replace />} />
     </Routes>
   );
 }

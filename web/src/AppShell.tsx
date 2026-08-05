@@ -28,10 +28,13 @@ export function AppShell() {
   return (
     <div className="shell">
       <header className="shell__band">
-        <NavLink to="/service" className="shell__mark">
+        <NavLink to="/properties" className="shell__mark">
           rental-bot
         </NavLink>
         <nav className="shell__nav">
+          <NavLink to="/properties" className="shell__link">
+            Properties
+          </NavLink>
           <NavLink to="/service" className="shell__link">
             Service
           </NavLink>
