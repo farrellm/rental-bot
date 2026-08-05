@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
@@ -19,6 +20,16 @@ type unitResponse struct {
 	Sqft       *int64   `json:"sqft"`
 	CreatedAt  string   `json:"created_at"`
 	UpdatedAt  string   `json:"updated_at"`
+
+	// ActiveLeaseID names the lease that makes this unit occupied today, or is
+	// null when nothing does. It is derived on every read from the lease dates
+	// and never stored (docs/DESIGN.md §3.2) — there is no is_occupied column
+	// to drift out of sync with the leases that are the actual evidence.
+	//
+	// It carries the lease id rather than a boolean so the screen can link to
+	// the reason for the answer instead of just asserting it.
+	ActiveLeaseID      *int64  `json:"active_lease_id"`
+	ActiveLeaseEndDate *string `json:"active_lease_end_date"`
 }
 
 // unitInput is a unit as a client writes it, on create or nested in a new
@@ -45,6 +56,25 @@ func newUnitResponses(units []sqlc.Unit) []unitResponse {
 	}
 	return out
 }
+
+// newOccupiedUnitResponses renders units with the lease that is holding them.
+func newOccupiedUnitResponses(rows []sqlc.ListUnitsWithOccupancyRow) []unitResponse {
+	out := make([]unitResponse, 0, len(rows))
+	for _, row := range rows {
+		u := newUnitResponse(row.Unit)
+		u.ActiveLeaseID = row.ActiveLeaseID
+		u.ActiveLeaseEndDate = row.ActiveLeaseEndDate
+		out = append(out, u)
+	}
+	return out
+}
+
+// today is the calendar date occupancy is asked about, in UTC.
+//
+// A date off a document is stored exactly as written with no timezone invented
+// for it (docs/DESIGN.md §3), so the question "does this lease cover today"
+// has to be asked in the same terms: one date string against two others.
+func today() string { return time.Now().UTC().Format(time.DateOnly) }
 
 type unitList struct {
 	Items []unitResponse `json:"items"`

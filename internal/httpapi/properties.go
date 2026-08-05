@@ -201,7 +201,12 @@ func (s *server) handleGetProperty(w http.ResponseWriter, r *http.Request) {
 		s.propertyReadError(w, r, err)
 		return
 	}
-	units, err := s.repo.Read().ListUnitsByProperty(ctx, id)
+	// The detail carries occupancy, so the Overview tab can say which units
+	// are let without a second request. It is derived from the lease dates on
+	// every read rather than stored.
+	units, err := s.repo.Read().ListUnitsWithOccupancy(ctx, sqlc.ListUnitsWithOccupancyParams{
+		PropertyID: id, Today: today(),
+	})
 	if err != nil {
 		loggerFrom(ctx).Error("list units", "error", err)
 		WriteProblem(w, r, http.StatusInternalServerError, "Could not read the units.")
@@ -210,7 +215,7 @@ func (s *server) handleGetProperty(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, r, http.StatusOK, propertyDetail{
 		propertyResponse: newPropertyResponse(property),
-		Units:            newUnitResponses(units),
+		Units:            newOccupiedUnitResponses(units),
 	})
 }
 
@@ -405,7 +410,9 @@ func (s *server) handleUpdateProperty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	units, err := s.repo.Read().ListUnitsByProperty(ctx, id)
+	units, err := s.repo.Read().ListUnitsWithOccupancy(ctx, sqlc.ListUnitsWithOccupancyParams{
+		PropertyID: id, Today: today(),
+	})
 	if err != nil {
 		loggerFrom(ctx).Error("list units", "error", err)
 		WriteProblem(w, r, http.StatusInternalServerError, "The property was saved but its units could not be read.")
@@ -414,7 +421,7 @@ func (s *server) handleUpdateProperty(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, r, http.StatusOK, propertyDetail{
 		propertyResponse: newPropertyResponse(updated),
-		Units:            newUnitResponses(units),
+		Units:            newOccupiedUnitResponses(units),
 	})
 }
 
