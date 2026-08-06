@@ -25,12 +25,43 @@
   max-width: none;
 }
 
+/* One row, always.
+ *
+ * The dividers in a drawer are a row you slide through, not a stack that
+ * reflows, and five of these never fit across a phone at a legible size. So the
+ * strip scrolls sideways inside itself and the page never does — which is also
+ * what keeps the joint below honest, because the pulled-forward tab is always
+ * on the row that touches the card.
+ *
+ * The 1px of lap comes from this element rather than from the tab: `overflow-x`
+ * makes a scroll container that clips in the block direction too, and a tab
+ * reaching 1px past its own bottom edge would be cut off or would raise a
+ * vertical scrollbar. The padding holds that pixel inside the container.
+ *
+ * The margin is -2px, not -1px: one pixel cancels that padding and the second
+ * is the lap itself. At -1px the two merely met, which left the card's own top
+ * rule drawing straight across the mouth of the open tab — the exact hairline
+ * this arrangement exists to hide. */
 .tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: flex-end;
   gap: 0.25rem;
-  padding-left: var(--gap-tight);
+  padding: 0 var(--gap-tight) 1px;
+  margin-bottom: -2px;
+
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+
+  /* No scrollbar chrome: this is a row of card dividers, and a widget's
+     scrollbar across the bottom of it would say otherwise. Flicking is the
+     affordance on a touch device, and a tab taking focus scrolls itself into
+     view for everyone else. */
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
@@ -60,38 +91,27 @@
   border: 1px solid transparent;
   border-bottom: none;
   border-radius: var(--radius) var(--radius) 0 0;
+
+  /* A flex item in a nowrap row would otherwise be allowed to shrink below its
+     label and clip it. */
+  flex: 0 0 auto;
 }
 
 .tab:hover {
   color: var(--card);
 }
 
-/* The section you are reading. Stock, a cut edge on three sides, and a
-   negative bottom margin that laps the card's own top rule so the two read as
-   one continuous sheet. */
+/* The section you are reading. Stock, a cut edge on three sides, and no bottom
+   edge at all: the strip's negative margin laps it over the card's own top rule
+   and this tab's stock paints across that line, so the two read as one
+   continuous sheet. z-index is what puts the tab's stock above the card's
+   border rather than under it. */
 .tab[aria-current="page"] {
   position: relative;
   z-index: 1;
-  margin-bottom: -1px;
   /* Ink on stock. .stock sets this too, but .tab's own colour above has the
      same specificity and is declared later, so it has to be said here. */
   color: var(--graphite);
   border-color: var(--card-rule);
   box-shadow: 0 -2px 6px -4px rgb(0 0 0 / 0.6);
-}
-
-/* Narrow ------------------------------------------------------------------- */
-
-/* Five tabs do not fit on one line on a phone, and a wrapped strip means the
-   current tab is often not on the row touching the card — a joint drawn to
-   nothing reads as a bug rather than as a folder. So below this width the tab
-   comes all the way out of the drawer instead: same stock, four edges, no
-   joint to get wrong. */
-@media (max-width: 40rem) {
-  .tab[aria-current="page"] {
-    margin-bottom: 0;
-    border: 1px solid var(--card-rule);
-    border-radius: var(--radius);
-    box-shadow: none;
-  }
 }

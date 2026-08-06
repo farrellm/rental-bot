@@ -1,4 +1,5 @@
-import { Link, NavLink, Outlet, useParams } from "react-router";
+import { useEffect, useRef } from "react";
+import { Link, NavLink, Outlet, useLocation, useParams } from "react-router";
 
 import { describeError } from "../api/client";
 import { useProperty } from "../api/queries";
@@ -17,8 +18,45 @@ import { Overview } from "./property/Overview";
  */
 export function PropertyRecord({ isNew = false }: { isNew?: boolean }) {
   const params = useParams();
+  const location = useLocation();
   const id = isNew ? 0 : Number(params.id ?? 0);
   const property = useProperty(id);
+
+  // The strip is one scrolling row, so a section further along it can be off
+  // the edge on arrival -- following a link straight to Documents would
+  // otherwise show a strip that starts at Overview and says nothing about
+  // where you are. Instant rather than smooth: this is the initial position of
+  // the row, not a movement the reader asked for.
+  //
+  // Twice, because the first pass runs against the wrong geometry: on a cold
+  // load it fires before the display face has loaded, the tabs are narrower
+  // than they will be, and a tab that measured as visible slides back off the
+  // edge the moment the real font arrives.
+  //
+  // `mounted` is in the dependencies because the strip does not exist on the
+  // first render — the record is still loading and this component returns early
+  // — so an effect keyed on the path alone found no nav to scroll and never ran
+  // again once one appeared. That is the whole reason a deep link landed on a
+  // strip showing Overview.
+  const tabs = useRef<HTMLElement>(null);
+  const mounted = isNew || Boolean(property.data);
+  useEffect(() => {
+    // Centred rather than merely on-screen: flush against an edge gives no sign
+    // that the row continues past it.
+    const reveal = () =>
+      tabs.current
+        ?.querySelector('[aria-current="page"]')
+        ?.scrollIntoView({ block: "nearest", inline: "center" });
+
+    reveal();
+    let cancelled = false;
+    void document.fonts.ready.then(() => {
+      if (!cancelled) reveal();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, mounted]);
 
   if (!isNew && property.isPending) {
     return (
@@ -48,7 +86,7 @@ export function PropertyRecord({ isNew = false }: { isNew?: boolean }) {
     <main className="shell__main shell__main--single">
       <div className="record">
         {!isNew && (
-          <nav className="tabs" aria-label="Sections of this record">
+          <nav className="tabs" aria-label="Sections of this record" ref={tabs}>
             <NavLink to={`/properties/${id}`} end className={tabClass}>
               Overview
             </NavLink>
