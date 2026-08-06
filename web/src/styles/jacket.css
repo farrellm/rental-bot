@@ -1,0 +1,171 @@
+/*
+ * The document jacket.
+ *
+ * One slip per document: what it is, what it was called, how big, and its
+ * accession number. The accession is the first bytes of the SHA-256 the file
+ * is stored under, and it is the document's real identity here rather than a
+ * decoration — two slips carrying the same accession are the same bytes, which
+ * is exactly why forwarding a receipt twice files it once.
+ */
+
+.jackets {
+  margin-top: var(--gap-tight);
+}
+
+.jacket {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+
+  padding: var(--gap-tight) 0;
+  border-bottom: 1px dashed var(--card-rule);
+}
+
+.jacket:last-child {
+  border-bottom: none;
+}
+
+.jacket__body {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.jacket__title {
+  font-size: var(--size-body);
+  font-weight: 600;
+  color: var(--graphite);
+  overflow-wrap: anywhere;
+}
+
+/* Opening a document is a link, so it is underlined the way a link is. It is
+   the only underline on a card, which is what makes it read as one.
+ *
+ * It is also the slip's main action, so it answers to the tap-target floor
+ * like every other control. A line of text is about 15px tall; a thumb is not.
+ * The box around the words is 44px, the words themselves are not. */
+.jacket__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-min);
+
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--card-rule);
+}
+
+.jacket__link:hover {
+  text-decoration-color: var(--verdigris);
+}
+
+.jacket__facts,
+.jacket__accession {
+  margin-top: var(--gap-hair);
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+}
+
+.jacket__kind {
+  color: var(--graphite);
+}
+
+.jacket__sep {
+  padding: 0 0.35rem;
+}
+
+.jacket__filed {
+  padding-left: 0.5rem;
+}
+
+.jacket__remove {
+  flex: 0 0 auto;
+}
+
+.jacket:hover .jacket__remove {
+  opacity: 1;
+}
+
+/* Attaching ---------------------------------------------------------------- */
+
+.attach {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+  padding-bottom: var(--gap-tight);
+  border-bottom: var(--rule);
+}
+
+/* A file input is a browser control that cannot usefully be restyled, so the
+   real one is visually hidden inside this label and the label is the control a
+   person sees: a word on a rule, like everything else on a card. The label
+   wraps the input, so a click and a keyboard both reach it. */
+.attach__choose {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-min);
+  padding: 0 var(--gap-tight);
+
+  border: 1px solid currentcolor;
+  border-radius: var(--radius);
+  color: var(--verdigris);
+  cursor: pointer;
+}
+
+.attach__choose:hover {
+  background: var(--verdigris-wash);
+}
+
+/* The focus ring follows the hidden input, which sits inside the label, so it
+   has to be drawn on the label instead. Without this a keyboard user tabbing
+   to the control gets no indication at all. */
+.attach__choose:has(:focus-visible) {
+  outline: 2px solid var(--verdigris);
+  outline-offset: 2px;
+}
+
+.attach__word {
+  font-size: var(--size-micro);
+  font-weight: 600;
+}
+
+.attach__state {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+}
+
+.attach__filename {
+  color: var(--graphite);
+}
+
+/* The state word sits off the filename by a space of its own, rather than by
+   a JSX whitespace expression that is easy to lose in an edit. */
+.attach__state .attach__word {
+  margin-left: 0.4rem;
+}
+
+.attach__word--done {
+  color: var(--verdigris);
+}
+
+/* Not an error. The bytes were already here, and saying so is more use than
+   either a duplicate or a refusal. */
+.attach__word--already {
+  color: var(--amber);
+}
+
+/* Narrow ------------------------------------------------------------------- */
+
+@media (max-width: 40rem) {
+  /* Remove goes under the slip rather than beside it: at this width a control
+     across from a wrapping filename squeezes the filename to nothing. */
+  .jacket__remove {
+    align-self: flex-end;
+  }
+}

@@ -2,11 +2,14 @@ package httpapi
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/farrellm/rental-bot/internal/blob"
 )
 
 // api drives the guarded API as a signed-in operator.
@@ -14,23 +17,31 @@ type api struct {
 	t       *testing.T
 	handler http.Handler
 	request func(method, target string, body any) *http.Request
+	// raw builds a request whose body is not JSON, for multipart uploads.
+	raw func(method, target string, body io.Reader) *http.Request
+	// blobs is the store the documents actually land in, so a test can check
+	// what reached the disk rather than only what the API said.
+	blobs *blob.Store
 }
 
-func newAPI(t *testing.T) *api {
+func newAPI(t *testing.T) *api { return newAPIWith(t, Options{}) }
+
+// newAPIWith is newAPI with the options a test wants to change -- a smaller
+// upload cap, an unwell database.
+func newAPIWith(t *testing.T, opts Options) *api {
 	t.Helper()
-	opts, request := authed(t, Options{})
+	opts, request := authed(t, opts)
 	handler := New(opts)
 	return &api{
 		t:       t,
 		handler: handler,
+		blobs:   opts.Blobs,
+		raw:     request,
 		request: func(method, target string, body any) *http.Request {
-			var r *http.Request
 			if body == nil {
-				r = request(method, target, nil)
-			} else {
-				r = request(method, target, jsonBody(t, body))
+				return request(method, target, nil)
 			}
-			return r
+			return request(method, target, jsonBody(t, body))
 		},
 	}
 }

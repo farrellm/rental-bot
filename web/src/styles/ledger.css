@@ -1,0 +1,297 @@
+/*
+ * The ledger sheet, and the band every section that is a list sits in.
+ *
+ * A ruled book: pre-printed column heads, one line per entry, a rule above the
+ * totals and a doubled rule under the net. The amount column is the only one
+ * that is right-aligned, because a column of figures is read by its last digit.
+ *
+ * One signed amount column, in graphite for income and expense alike. An
+ * expense is not a fault, and colouring every one of them red would make an
+ * ordinary month look like an emergency. The net is the one figure allowed to
+ * raise its voice, and only when it is negative.
+ */
+
+/* The band --------------------------------------------------------------- */
+
+/* Every section that is a list rather than a set of fields sits in one of
+   these: a band of the card with its own eyebrow, the same as .units. */
+.sheet {
+  padding: var(--gap-band);
+}
+
+/* The tab already names the section, so the band does not repeat it. What is
+   left is the controls that change what the sheet is showing, which sit at the
+   end of the line where a reader looks for them. */
+.sheet__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+}
+
+.sheet__eyebrow {
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+.sheet__filters {
+  display: flex;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+}
+
+.sheet__filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.sheet__filter-label {
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+.sheet__empty {
+  margin-top: var(--gap-tight);
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+}
+
+.sheet__actions {
+  margin-top: var(--gap);
+}
+
+/* The sheet -------------------------------------------------------------- */
+
+/* Four columns sized once on the sheet and inherited by every row through
+   subgrid, so the figures line up down the page without a hard-coded width
+   anywhere. The date and the amount take exactly what they need; the entry
+   takes the slack. */
+.ledger-sheet {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content max-content max-content;
+  margin-top: var(--gap-tight);
+}
+
+.ledger-sheet__head,
+.ledger-sheet__row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: baseline;
+  column-gap: var(--gap-tight);
+  padding: 0.45rem 0;
+}
+
+.ledger-sheet__head {
+  padding-bottom: 0.35rem;
+  border-bottom: var(--rule);
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+.ledger-sheet__row {
+  border-bottom: 1px dashed var(--card-rule);
+  font-size: var(--size-small);
+  /* The row is a grid item, so it needs this before its own columns will
+     give way to a long description. */
+  min-width: 0;
+}
+
+.ledger-sheet__date {
+  color: var(--muted-ink);
+  white-space: nowrap;
+}
+
+.ledger-sheet__entry {
+  min-width: 0;
+  font-size: var(--size-body);
+  color: var(--graphite);
+  overflow-wrap: anywhere;
+}
+
+/* A printed classification, not a badge. No fill, no pill: this is the code
+   written in the category column of a ruled book. */
+.ledger-sheet__category {
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  white-space: nowrap;
+}
+
+/* The flag M4 sets on anything that arrived from an email and has not been
+   cleared by a person yet. */
+.ledger-sheet__flag {
+  font-size: var(--size-micro);
+  color: var(--amber);
+}
+
+/* Figures are read by their last digit, so they align on it. */
+.ledger-sheet__figure {
+  font-size: var(--size-body);
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The one figure allowed a colour, and only when the month lost money. */
+.ledger-sheet__figure--short {
+  color: var(--oxide);
+}
+
+/* Striking an entry out. The quiet treatment is .button--quiet in
+   controls.css; this only says where it sits and what reveals it. */
+.ledger-sheet__strike {
+  justify-self: end;
+}
+
+.ledger-sheet__row:hover .ledger-sheet__strike {
+  opacity: 1;
+}
+
+/* The foot takes the sheet's own columns through subgrid, so a total lands in
+   the same column as the figures it is adding up. A foot on its own grid
+   reached the card's right edge while the entries stopped short of it, and a
+   ledger whose total does not line up with its column is not a ledger. */
+.ledger-sheet__foot {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  column-gap: var(--gap-tight);
+  row-gap: 0.3rem;
+
+  margin-top: var(--gap-hair);
+  padding-top: var(--gap-tight);
+  border-top: var(--rule);
+}
+
+/* The label takes everything left of the figures; the figure takes their
+   column, and the strike column at the end stays empty. */
+.ledger-sheet__total-label {
+  grid-column: 1 / 4;
+  font-size: var(--size-micro);
+  text-align: right;
+  color: var(--muted-ink);
+}
+
+.ledger-sheet__foot .ledger-sheet__figure {
+  grid-column: 4;
+}
+
+/* The accountant's double underline: this is the figure the sheet was adding
+   up to, and nothing follows it. */
+.ledger-sheet__net {
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--card-rule);
+  box-shadow: 0 3px 0 -2px var(--card-rule);
+}
+
+.ledger-sheet__foot .ledger-sheet__net.ledger-sheet__figure {
+  font-weight: 600;
+}
+
+/* A section still loading says so in ink, because it is on the card rather
+   than on the ground. */
+.waiting--ink {
+  margin-top: var(--gap-tight);
+  color: var(--muted-ink);
+}
+
+/* The entry form --------------------------------------------------------- */
+
+.sheet__form {
+  margin-top: var(--gap);
+  padding-top: var(--gap-tight);
+  border-top: var(--rule);
+}
+
+/* Entries wrap onto as many lines as they need rather than shrinking below
+   legibility. The date and the amount want their own width; the description
+   takes a whole line. */
+.sheet__form-rows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-tight);
+  margin: var(--gap-tight) 0;
+}
+
+.sheet__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.sheet__field--wide {
+  flex: 1 1 100%;
+}
+
+/* Narrow ----------------------------------------------------------------- */
+
+/* Below this the four columns cannot hold their figures at a legible size, so
+   the row becomes two lines: date and amount on the first, because those are
+   what you scan for, and the entry with its category underneath. */
+@media (max-width: 40rem) {
+  .sheet {
+    padding: var(--gap-tight);
+  }
+
+  .ledger-sheet {
+    grid-template-columns: 1fr max-content;
+  }
+
+  .ledger-sheet__head {
+    display: none;
+  }
+
+  .ledger-sheet__row {
+    grid-template-columns: 1fr max-content;
+    row-gap: 0.15rem;
+    padding: 0.6rem 0;
+  }
+
+  /* Placement is scoped to a row. Unscoped, `.ledger-sheet__figure` put every
+     total in the foot on grid-row 1 as well, and the three of them landed on
+     top of each other. */
+  .ledger-sheet__row > .ledger-sheet__date {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: var(--size-micro);
+  }
+
+  .ledger-sheet__row > .ledger-sheet__figure {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .ledger-sheet__row > .ledger-sheet__entry {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  /* One column each: spanning the category across both put it under the
+     strike, which is an overlap however short the word happens to be. */
+  .ledger-sheet__row > .ledger-sheet__category {
+    grid-column: 1;
+    grid-row: 3;
+    white-space: normal;
+  }
+
+  .ledger-sheet__row > .ledger-sheet__strike {
+    grid-column: 2;
+    grid-row: 3;
+    opacity: 0.5;
+  }
+
+  /* Two columns now, so the label takes the first and the figure the second. */
+  .ledger-sheet__total-label {
+    grid-column: 1;
+  }
+
+  .ledger-sheet__foot .ledger-sheet__figure {
+    grid-column: 2;
+    grid-row: auto;
+  }
+}

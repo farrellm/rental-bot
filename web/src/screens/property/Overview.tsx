@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
-import { describeError } from "../api/client";
+import { describeError } from "../../api/client";
 import {
   useCreateProperty,
   useCreateUnit,
@@ -10,10 +10,10 @@ import {
   useProperty,
   useUpdateProperty,
   useUpdateUnit,
-} from "../api/queries";
-import type { PropertyStatus } from "../api/types";
-import { Stamp } from "../components/Stamp";
-import { calendarDate, fileNumber, orDashNumber } from "../format";
+} from "../../api/queries";
+import type { PropertyStatus, Unit } from "../../api/types";
+import { Stamp } from "../../components/Stamp";
+import { calendarDate, orDashNumber } from "../../format";
 import {
   blankUnitDraft,
   emptyDraft,
@@ -30,18 +30,20 @@ import {
 const STATUSES: PropertyStatus[] = ["active", "sold", "prospect"];
 
 /**
- * One property, as a record card you amend in place.
+ * The Overview section: the property's own entries, amended in place.
  *
- * Reading and amending are the same card: the entries sit on the rules the
- * values sat on, so nothing moves when the mode changes. While the card is
+ * Reading and amending are the same rows: the entries sit on the rules the
+ * values sat on, so nothing moves when the mode changes. While the section is
  * open its status stamp is replaced by AMENDING, because what is on it is not
  * yet what is on file.
+ *
+ * This fills the card's body. The head band and the divider tabs belong to
+ * PropertyRecord, which is the folder these sections live in.
  */
-export function PropertyDetail() {
+export function Overview({ isNew = false }: { isNew?: boolean }) {
   const params = useParams();
   const navigate = useNavigate();
 
-  const isNew = params.id === "new";
   const id = isNew ? 0 : Number(params.id ?? 0);
 
   const property = useProperty(id);
@@ -73,28 +75,6 @@ export function PropertyDetail() {
     setOriginalUnits(toUnitDrafts(property.data.units));
   }, [property.data, editing]);
 
-  if (!isNew && property.isPending) {
-    return (
-      <main className="shell__main">
-        <p className="waiting">Reading the record</p>
-      </main>
-    );
-  }
-  if (!isNew && property.isError) {
-    return (
-      <main className="shell__main">
-        <div className="empty">
-          <p className="empty__line">{describeError(property.error)}</p>
-          <p className="empty__action">
-            <Link to="/properties" className="button button--ground">
-              Back to properties
-            </Link>
-          </p>
-        </div>
-      </main>
-    );
-  }
-
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
 
@@ -102,6 +82,10 @@ export function PropertyDetail() {
     setUnits((current) => current.map((u) => (u.key === key ? { ...u, ...patch } : u)));
 
   const live = units.filter((u) => !u.removed);
+
+  // Occupancy comes off the record rather than the draft: it is derived from
+  // the lease dates by the server and is not something this card edits.
+  const unitsById = new Map<number, Unit>((property.data?.units ?? []).map((u) => [u.id, u]));
 
   function startAmending() {
     setProblems([]);
@@ -195,22 +179,8 @@ export function PropertyDetail() {
   const problemFor = (field: string) => problems.find((p) => p.field === field)?.message;
 
   return (
-    <main className="shell__main shell__main--single">
-      <article className="card">
-        <header className="card__head">
-          <div>
-            <h1 className="card__mark stamped">
-              {draft.nickname || (isNew ? "New property" : "Untitled")}
-            </h1>
-            {!editing && <p className="record__address mono">{oneLineAddress(draft)}</p>}
-          </div>
-          <div className="card__file">
-            <p className="card__eyebrow stamped">Property record</p>
-            {!isNew && <p className="card__read mono">{fileNumber(id)}</p>}
-          </div>
-        </header>
-
-        {notice && <p className="card__notice">{notice}</p>}
+    <>
+      {notice && <p className="card__notice">{notice}</p>}
         {problems.length > 0 && (
           <p className="card__notice">
             {problems.length === 1 ? problems[0]?.message : "Some entries could not be read."}
@@ -484,6 +454,9 @@ export function PropertyDetail() {
                 <div key={unit.key} className="unit">
                   <span className="unit__label mono">{unit.label}</span>
                   <span className="unit__facts mono">{unitFacts(unit)}</span>
+                  <span className={occupancyClass(unitsById.get(unit.id ?? 0))}>
+                    {occupancy(unitsById.get(unit.id ?? 0))}
+                  </span>
                 </div>
               ),
             )}
@@ -563,8 +536,7 @@ export function PropertyDetail() {
 
           <Stamp state={editing ? "amending" : draft.status} />
         </footer>
-      </article>
-    </main>
+    </>
   );
 }
 
@@ -624,7 +596,19 @@ function unitFacts(unit: UnitDraft): string {
   return parts.length > 0 ? parts.join("  ") : "—";
 }
 
-function oneLineAddress(draft: Draft): string {
-  const region = [draft.city, draft.state, draft.postal_code].filter(Boolean).join(" ");
-  return [draft.address_line1, region].filter(Boolean).join(", ") || "—";
+/**
+ * What a unit's leases say about it today.
+ *
+ * Occupancy is derived, never stored: the server answers it from the lease
+ * dates on every read. "Let" here means a lease covers today, and the date is
+ * the day that stops being true.
+ */
+function occupancy(unit: Unit | undefined): string {
+  if (!unit || unit.active_lease_id == null) return "Vacant";
+  return unit.active_lease_end_date ? `Let to ${unit.active_lease_end_date}` : "Let, month to month";
+}
+
+function occupancyClass(unit: Unit | undefined): string {
+  const let_ = unit != null && unit.active_lease_id != null;
+  return let_ ? "unit__standing mono unit__standing--let" : "unit__standing mono";
 }

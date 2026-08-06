@@ -57,6 +57,10 @@ type Database struct {
 type Storage struct {
 	Blobs    string `toml:"blobs"`
 	RawEmail string `toml:"raw_email"`
+	// MaxUploadBytes caps one document. It is a cap on the request body, so it
+	// is enforced before the bytes reach the disk rather than after. §5.3 asks
+	// for the same cap on email attachments, and M3 reads this one.
+	MaxUploadBytes int64 `toml:"max_upload_bytes"`
 }
 
 // Log configures structured logging.
@@ -89,6 +93,9 @@ func Default() Config {
 		Storage: Storage{
 			Blobs:    "data/blobs",
 			RawEmail: "data/raw-email",
+			// Comfortably past a scanned lease, well short of anything that
+			// would be a memory problem to receive.
+			MaxUploadBytes: 25 << 20, // 25 MiB
 		},
 		Log: Log{
 			Level:  "info",
@@ -135,6 +142,9 @@ func (c *Config) overlayEnv() error {
 	}
 	envString("STORAGE_BLOBS", &c.Storage.Blobs)
 	envString("STORAGE_RAW_EMAIL", &c.Storage.RawEmail)
+	if err := envInt64("STORAGE_MAX_UPLOAD_BYTES", &c.Storage.MaxUploadBytes); err != nil {
+		return err
+	}
 	envString("LOG_LEVEL", &c.Log.Level)
 	envString("LOG_FORMAT", &c.Log.Format)
 
@@ -179,6 +189,9 @@ func (c Config) Validate() error {
 	}
 	if c.Database.ReadPoolSize < 1 {
 		return fmt.Errorf("database.read_pool_size is %d; it must be at least 1", c.Database.ReadPoolSize)
+	}
+	if c.Storage.MaxUploadBytes < 1 {
+		return fmt.Errorf("storage.max_upload_bytes is %d; it must be at least 1", c.Storage.MaxUploadBytes)
 	}
 	if _, err := ParseLevel(c.Log.Level); err != nil {
 		return err
@@ -245,6 +258,19 @@ func envInt(suffix string, dst *int) error {
 		return nil
 	}
 	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fmt.Errorf("%s%s is %q; it must be an integer", envPrefix, suffix, v)
+	}
+	*dst = n
+	return nil
+}
+
+func envInt64(suffix string, dst *int64) error {
+	v, ok := os.LookupEnv(envPrefix + suffix)
+	if !ok {
+		return nil
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {
 		return fmt.Errorf("%s%s is %q; it must be an integer", envPrefix, suffix, v)
 	}

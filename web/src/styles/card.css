@@ -6,17 +6,33 @@
  * thing on this page that moves.
  */
 
+/* The stock itself: colour and tooth, with no edges.
+ *
+ * A card is stock plus a cut edge and a shadow. A divider tab is stock with
+ * three edges, cut from the same sheet — which is why this is a class rather
+ * than lines repeated in tabs.css. The tooth has to match exactly or the joint
+ * between a tab and its card is visible.
+ *
+ * `.card` is listed here rather than being asked to wear `.stock` as a second
+ * class. A card that is not on stock is not a card, and making that an opt-in
+ * meant three screens rendered as dark rectangles with unreadable ink the
+ * moment this was extracted — the index, the sign-in slip, and the service
+ * record all had a `.card` that nobody remembered to update. A rule nobody can
+ * forget beats a rule everybody has to. */
+.stock,
 .card {
-  position: relative;
-  width: 100%;
-  max-width: var(--card-width);
-
   color: var(--graphite);
   background-color: var(--card);
   /* Paper tooth: a cross-hatch far too faint to read as a pattern. */
   background-image:
     repeating-linear-gradient(90deg, rgb(34 49 47 / 0.018) 0 1px, transparent 1px 3px),
     repeating-linear-gradient(0deg, rgb(34 49 47 / 0.012) 0 1px, transparent 1px 4px);
+}
+
+.card {
+  position: relative;
+  width: 100%;
+  max-width: var(--card-width);
 
   border: var(--rule);
   border-radius: var(--radius);
@@ -243,6 +259,37 @@
 }
 
 .stamp--refused {
+  color: var(--oxide);
+}
+
+/* Repairs. Work outstanding is amber, work finished goes quiet, and work that
+   will not be done reads as history rather than as fault -- nobody is owed
+   anything on a wontfix. */
+.stamp--open,
+.stamp--scheduled,
+.stamp--in-progress {
+  color: var(--amber);
+}
+
+.stamp--done {
+  color: var(--verdigris);
+}
+
+.stamp--wontfix {
+  color: var(--muted-ink);
+}
+
+/* Leases. Signed but not started yet is provisional, like a prospect. */
+.stamp--pending {
+  color: var(--amber);
+}
+
+.stamp--ended {
+  color: var(--muted-ink);
+}
+
+/* Ended early. Not a fault of the system, but a thing worth seeing. */
+.stamp--terminated {
   color: var(--oxide);
 }
 

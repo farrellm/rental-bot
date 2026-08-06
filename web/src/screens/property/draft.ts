@@ -7,8 +7,8 @@
  * back to 3 under their cursor.
  */
 
-import { money, parseMoney } from "../format";
-import type { PropertyDetail, PropertyStatus, PropertyWrite, Unit, UnitWrite } from "../api/types";
+import { money, parseMoney } from "../../format";
+import type { PropertyDetail, PropertyStatus, PropertyWrite, Unit, UnitWrite } from "../../api/types";
 
 export interface Draft {
   nickname: string;

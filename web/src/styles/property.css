@@ -135,6 +135,23 @@
   color: var(--muted-ink);
 }
 
+/* What the leases say about this unit today.
+ *
+ * Occupancy is derived and never stored, so this is a reading rather than a
+ * setting: the server answers it from the lease dates on every request, and a
+ * lease that lapses overnight changes this with nothing having been run. */
+.unit__standing {
+  min-width: 0;
+  flex: 0 1 auto;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  white-space: nowrap;
+}
+
+.unit__standing--let {
+  color: var(--verdigris);
+}
+
 /* A unit being amended: the label and its three measures on ruled lines,
    wrapping rather than shrinking below legibility. */
 .unit--editing {

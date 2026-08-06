@@ -56,7 +56,11 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const method = options.method ?? "GET";
   const headers: Record<string, string> = { Accept: "application/json" };
 
-  if (options.body !== undefined) {
+  // FormData carries its own multipart Content-Type, boundary and all, and the
+  // browser sets it. Naming it here would drop the boundary and the server
+  // would see an unparseable body.
+  const isForm = options.body instanceof FormData;
+  if (options.body !== undefined && !isForm) {
     headers["Content-Type"] = "application/json";
   }
   if (!SAFE_METHODS.has(method)) {
@@ -69,7 +73,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       method,
       headers,
       signal: options.signal,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: options.body === undefined ? undefined : isForm ? (options.body as FormData) : JSON.stringify(options.body),
       // The session is a cookie; same-origin is the default but saying so
       // keeps it true if this is ever served from somewhere else.
       credentials: "same-origin",

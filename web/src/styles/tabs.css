@@ -1,0 +1,117 @@
+/*
+ * The divider tabs on a property record.
+ *
+ * A card index has tab dividers, so that is what these are. The current
+ * section's tab is cut from the same stock as the card, shares its rule, and
+ * drops its own bottom edge — it *is* the card's top edge, and the joint has
+ * to be invisible for that to read. The rest sit on the petrol ground behind
+ * the rule, the way a divider you are not looking at sits behind the one you
+ * pulled forward.
+ *
+ * Only the tab strip is new here. The card below it is the same record card
+ * every other screen uses, at the same width: a folder does not change size
+ * when you turn to a different section of it.
+ */
+
+/* The record column: the tabs and the card share one width and one centre, so
+   nothing shifts sideways when the section changes. */
+.record {
+  width: 100%;
+  max-width: var(--card-width);
+}
+
+.record .card {
+  /* The column above sizes it now. */
+  max-width: none;
+}
+
+/* One row, always.
+ *
+ * The dividers in a drawer are a row you slide through, not a stack that
+ * reflows, and five of these never fit across a phone at a legible size. So the
+ * strip scrolls sideways inside itself and the page never does — which is also
+ * what keeps the joint below honest, because the pulled-forward tab is always
+ * on the row that touches the card.
+ *
+ * The 1px of lap comes from this element rather than from the tab: `overflow-x`
+ * makes a scroll container that clips in the block direction too, and a tab
+ * reaching 1px past its own bottom edge would be cut off or would raise a
+ * vertical scrollbar. The padding holds that pixel inside the container.
+ *
+ * The margin is -2px, not -1px: one pixel cancels that padding and the second
+ * is the lap itself. At -1px the two merely met, which left the card's own top
+ * rule drawing straight across the mouth of the open tab — the exact hairline
+ * this arrangement exists to hide. */
+.tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 0.25rem;
+  padding: 0 var(--gap-tight) 1px;
+  margin-bottom: -2px;
+
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+
+  /* No scrollbar chrome: this is a row of card dividers, and a widget's
+     scrollbar across the bottom of it would say otherwise. Flicking is the
+     affordance on a touch device, and a tab taking focus scrolls itself into
+     view for everyone else. */
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  /* The tap-target floor applies to a tab like everything else. */
+  min-height: var(--control-min);
+  min-width: 0;
+  padding: 0 var(--gap-tight);
+
+  font-family: var(--face-display);
+  font-size: var(--size-micro);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+
+  /* Bone on petrol: a tab you have not pulled forward is on the ground, not
+     on stock. No background declaration here at all — `background: none` is a
+     shorthand, and being declared after card.css it would cancel the stock
+     colour and tooth on the pulled-forward tab. A link has no background of
+     its own to reset. */
+  color: rgb(232 226 210 / 0.66);
+  /* Transparent rather than absent, so pulling a tab forward does not move
+     the strip by a pixel. */
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+
+  /* A flex item in a nowrap row would otherwise be allowed to shrink below its
+     label and clip it. */
+  flex: 0 0 auto;
+}
+
+.tab:hover {
+  color: var(--card);
+}
+
+/* The section you are reading. Stock, a cut edge on three sides, and no bottom
+   edge at all: the strip's negative margin laps it over the card's own top rule
+   and this tab's stock paints across that line, so the two read as one
+   continuous sheet. z-index is what puts the tab's stock above the card's
+   border rather than under it. */
+.tab[aria-current="page"] {
+  position: relative;
+  z-index: 1;
+  /* Ink on stock. .stock sets this too, but .tab's own colour above has the
+     same specificity and is declared later, so it has to be said here. */
+  color: var(--graphite);
+  border-color: var(--card-rule);
+  box-shadow: 0 -2px 6px -4px rgb(0 0 0 / 0.6);
+}

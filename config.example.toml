@@ -25,6 +25,9 @@ read_pool_size = 4
 # Content-addressed blob store and the raw .eml archive.
 blobs = "data/blobs"
 raw_email = "data/raw-email"
+# The largest document that can be uploaded, in bytes. The cap is applied to
+# the request body, so anything past it is refused before it reaches the disk.
+max_upload_bytes = 26214400 # 25 MiB
 
 [log]
 # debug | info | warn | error

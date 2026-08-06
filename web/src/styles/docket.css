@@ -1,0 +1,179 @@
+/*
+ * The repair docket.
+ *
+ * A job ticket: a numbered line you can scan, and the ticket's history behind
+ * it. The line carries what someone deciding where to look needs — the fault,
+ * what it cost, and its standing — and nothing else. A list showing every event
+ * on every repair is not a list anyone can scan.
+ *
+ * The history is numbered because it is genuinely a sequence: quoted, then
+ * scheduled, then done, then paid. The order carries information, which is the
+ * only thing that earns a number.
+ */
+
+.dockets {
+  margin-top: var(--gap-tight);
+}
+
+.docket + .docket {
+  border-top: 1px dashed var(--card-rule);
+}
+
+/* The line is a control, so it answers to the tap-target floor — but it is a
+   line on a card, not a button, so it carries no fill and no rule of its own. */
+.docket__line {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+  width: 100%;
+
+  min-height: var(--control-min);
+  padding: var(--gap-tight) 0;
+
+  font-family: var(--face-display);
+  font-size: var(--size-body);
+  text-align: left;
+  color: var(--graphite);
+
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.docket__line:hover {
+  background: var(--ink-wash);
+}
+
+.docket__no {
+  flex: 0 0 auto;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+/* The fault takes the slack and gives way first, because the figures and the
+   stamp beside it have a width they cannot go below. */
+.docket__fault {
+  flex: 1 1 10rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.docket__cost {
+  flex: 0 0 auto;
+  font-size: var(--size-body);
+  font-variant-numeric: tabular-nums;
+}
+
+/* An estimate is not what it cost. Saying so beside the figure is cheaper than
+   a second column that is empty on most rows. */
+.docket__estimate {
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+/* The open ticket ---------------------------------------------------------- */
+
+.docket__body {
+  padding: 0 0 var(--gap) 0;
+}
+
+/* The ticket's facts, in the card's own field geometry so a docket reads like
+   the rest of the record rather than like a panel that landed on it. */
+.docket__facts {
+  margin-bottom: var(--gap-tight);
+}
+
+.docket__standing {
+  margin-bottom: var(--gap);
+}
+
+.docket__eyebrow {
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+/* The timeline ------------------------------------------------------------- */
+
+/* Three columns held on the list and inherited by every step, so the numbers
+   and the times line up down the sequence. */
+.timeline {
+  display: grid;
+  grid-template-columns: max-content max-content 1fr;
+  gap: 0.35rem var(--gap-tight);
+  margin-top: var(--gap-tight);
+  padding: 0;
+  list-style: none;
+}
+
+.timeline__step {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: baseline;
+}
+
+.timeline__no {
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+.timeline__at {
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  white-space: nowrap;
+}
+
+.timeline__note {
+  min-width: 0;
+  font-size: var(--size-small);
+  color: var(--graphite);
+  overflow-wrap: anywhere;
+}
+
+/* Adding a line to the history: an entry on a rule and a word, the same as
+   everywhere else. */
+.docket__record {
+  display: flex;
+  gap: var(--gap-tight);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-top: var(--gap);
+}
+
+.docket__record .entry {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+/* Narrow ------------------------------------------------------------------- */
+
+@media (max-width: 40rem) {
+  /* The stamp goes under the line rather than beside it, the way it does on
+     every other card in this application when there is no room across. */
+  .docket__line {
+    align-items: flex-start;
+  }
+
+  .docket__line .stamp {
+    align-self: flex-start;
+    transform: rotate(-3deg);
+  }
+
+  /* The time moves under its number and note, because three columns of this
+     at 320px leaves the note four characters wide. */
+  .timeline,
+  .timeline__step {
+    grid-template-columns: max-content 1fr;
+  }
+
+  .timeline__at {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .timeline__note {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}

@@ -1,0 +1,198 @@
+/*
+ * The lease abstract, and the term rule.
+ *
+ * The abstract is the one-page summary clipped to the front of a lease: who,
+ * which unit, how long, at what rent. The lease itself is a PDF in Documents.
+ *
+ * The term rule is the one drawn thing in this application, and it earns that
+ * because a lease's defining property is that it runs out — a date says when,
+ * but not how soon, and "how soon" is the question an operator actually has.
+ * It is a printed timeline on a form: a hairline between two dated ticks, the
+ * spent part inked in, a mark at today. Reading a tenancy becomes looking
+ * instead of subtracting.
+ *
+ * It is drawn in the same vocabulary as everything else — rules, ticks, ink on
+ * stock — so it belongs to the card rather than arriving as a chart.
+ */
+
+.abstracts {
+  margin-top: var(--gap-tight);
+}
+
+.abstract + .abstract {
+  margin-top: var(--gap);
+  padding-top: var(--gap);
+  border-top: 1px dashed var(--card-rule);
+}
+
+.abstract__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+}
+
+.abstract__who {
+  min-width: 0;
+}
+
+.abstract__unit {
+  font-size: var(--size-lead);
+  font-weight: 600;
+  letter-spacing: var(--track-mark);
+  text-transform: uppercase;
+  color: var(--graphite);
+  overflow-wrap: anywhere;
+}
+
+.abstract__rent {
+  margin-top: var(--gap-hair);
+  font-size: var(--size-body);
+  color: var(--graphite);
+}
+
+.abstract__per {
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+/* The term rule ------------------------------------------------------------ */
+
+.term {
+  margin-top: var(--gap-tight);
+}
+
+/* The rule itself: a printed hairline the full width of the term. */
+.term__rule {
+  position: relative;
+  height: 3px;
+  background: var(--card-rule);
+  border-radius: 1px;
+}
+
+/* Time already spent, inked in from the start tick. */
+.term__spent {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  background: var(--verdigris);
+  border-radius: 1px;
+}
+
+/* Today. A cut mark across the rule rather than a dot on it, because this is
+   a position on a printed scale and not a data point. */
+.term__today {
+  position: absolute;
+  inset-block: -5px;
+  inline-size: 1px;
+  /* The mark sits on the position, not after it. */
+  margin-inline-start: -0.5px;
+  background: var(--graphite);
+}
+
+/* The ticks, dated. The remark between them says in words what the rule says
+   in ink, because a picture alone is not a record. */
+.term__ticks {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-hair);
+  margin-top: 0.4rem;
+}
+
+.term__tick {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  white-space: nowrap;
+}
+
+.term__tick--end {
+  text-align: right;
+}
+
+.term__left {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: var(--size-micro);
+  color: var(--graphite);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* More ---------------------------------------------------------------------- */
+
+/* Ink, not a rule around a word: this opens a fold on the abstract rather than
+   performing an action. */
+.abstract__more {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-min);
+  padding: 0;
+  margin-top: var(--gap-hair);
+
+  font-family: var(--face-display);
+  font-size: var(--size-micro);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--muted-ink);
+
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.abstract__more:hover {
+  color: var(--graphite);
+}
+
+.abstract__body {
+  margin-top: var(--gap-hair);
+}
+
+.abstract__actions {
+  display: flex;
+  gap: var(--gap);
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-top: var(--gap-tight);
+}
+
+.abstract__tenant {
+  display: flex;
+  gap: var(--gap-tight);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  flex: 1 1 14rem;
+  min-width: 0;
+  /* A name is not as wide as the card. Letting this grow to the full width
+     made a one-word entry look like the main event on the abstract. */
+  max-width: 26rem;
+}
+
+.abstract__tenant .sheet__filter {
+  flex: 1 1 10rem;
+}
+
+/* Narrow -------------------------------------------------------------------- */
+
+@media (max-width: 40rem) {
+  /* Three things across a 320px rule leaves each of them four characters
+     wide, so the remark takes its own line under the two dates it describes. */
+  .term__ticks {
+    flex-wrap: wrap;
+  }
+
+  .term__left {
+    order: 1;
+    flex: 1 1 100%;
+    text-align: left;
+  }
+
+  .abstract__head .stamp {
+    transform: rotate(-3deg);
+  }
+}

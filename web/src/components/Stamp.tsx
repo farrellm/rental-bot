@@ -16,7 +16,18 @@ export type StampState =
   | "prospect"
   | "sold"
   | "amending"
-  | "refused";
+  | "refused"
+  // Repairs: where a job stands.
+  | "open"
+  | "scheduled"
+  | "in-progress"
+  | "done"
+  | "wontfix"
+  // Leases: where a tenancy stands. `active` is shared with a property, on
+  // purpose -- a let unit and a held property are the same idea.
+  | "pending"
+  | "ended"
+  | "terminated";
 
 const WORD: Record<StampState, string> = {
   operational: "Operational",
@@ -27,6 +38,14 @@ const WORD: Record<StampState, string> = {
   sold: "Sold",
   amending: "Amending",
   refused: "Refused",
+  open: "Open",
+  scheduled: "Scheduled",
+  "in-progress": "In progress",
+  done: "Done",
+  wontfix: "Won't fix",
+  pending: "Pending",
+  ended: "Ended",
+  terminated: "Terminated",
 };
 
 interface Props {

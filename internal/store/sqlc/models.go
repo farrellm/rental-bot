@@ -8,6 +8,31 @@ import (
 	"github.com/farrellm/rental-bot/internal/domain"
 )
 
+type Document struct {
+	ID               int64
+	PropertyID       *int64
+	Kind             string
+	Title            string
+	OriginalFilename string
+	Mime             string
+	SizeBytes        int64
+	Sha256           string
+	StoragePath      string
+	ExtractedText    string
+	UploadedBy       *int64
+	CreatedAt        string
+	UpdatedAt        string
+}
+
+type DocumentLink struct {
+	ID         int64
+	DocumentID int64
+	EntityType string
+	EntityID   int64
+	CreatedAt  string
+	UpdatedAt  string
+}
+
 type Job struct {
 	ID          int64
 	Kind        string
@@ -27,6 +52,32 @@ type Job struct {
 type Kv struct {
 	Key       string
 	Value     string
+	UpdatedAt string
+}
+
+type Lease struct {
+	ID               int64
+	UnitID           int64
+	StartDate        string
+	EndDate          *string
+	RentCents        domain.Money
+	DepositCents     *domain.Money
+	DueDay           *int64
+	LateFeeCents     *domain.Money
+	Status           string
+	RenewalOfLeaseID *int64
+	DocumentID       *int64
+	Notes            string
+	CreatedAt        string
+	UpdatedAt        string
+}
+
+type LeaseTenant struct {
+	ID        int64
+	LeaseID   int64
+	TenantID  int64
+	Role      string
+	CreatedAt string
 	UpdatedAt string
 }
 
@@ -53,6 +104,35 @@ type Property struct {
 	UpdatedAt          string
 }
 
+type Repair struct {
+	ID            int64
+	PropertyID    int64
+	UnitID        *int64
+	OpenedOn      string
+	ClosedOn      *string
+	Status        string
+	Category      string
+	VendorID      *int64
+	Description   string
+	EstimateCents *domain.Money
+	ActualCents   *domain.Money
+	IsCapex       int64
+	WarrantyUntil *string
+	Notes         string
+	CreatedAt     string
+	UpdatedAt     string
+}
+
+type RepairEvent struct {
+	ID         int64
+	RepairID   int64
+	At         string
+	Note       string
+	DocumentID *int64
+	CreatedAt  string
+	UpdatedAt  string
+}
+
 type Session struct {
 	ID         int64
 	UserID     int64
@@ -63,6 +143,37 @@ type Session struct {
 	LastSeenAt string
 	CreatedAt  string
 	UpdatedAt  string
+}
+
+type Tenant struct {
+	ID        int64
+	Name      string
+	Email     string
+	Phone     string
+	Notes     string
+	CreatedAt string
+	UpdatedAt string
+}
+
+type Transaction struct {
+	ID            int64
+	PropertyID    int64
+	OccurredOn    string
+	AmountCents   domain.Money
+	Category      string
+	Description   string
+	Counterparty  string
+	PaymentMethod string
+	UnitID        *int64
+	LeaseID       *int64
+	RepairID      *int64
+	VendorID      *int64
+	DocumentID    *int64
+	Source        string
+	Confidence    *float64
+	NeedsReview   int64
+	CreatedAt     string
+	UpdatedAt     string
 }
 
 type Unit struct {
@@ -84,4 +195,15 @@ type User struct {
 	TotpSecret   *string
 	CreatedAt    string
 	UpdatedAt    string
+}
+
+type Vendor struct {
+	ID        int64
+	Name      string
+	Trade     string
+	Phone     string
+	Email     string
+	Notes     string
+	CreatedAt string
+	UpdatedAt string
 }

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/farrellm/rental-bot/internal/auth"
+	"github.com/farrellm/rental-bot/internal/blob"
+	"github.com/farrellm/rental-bot/internal/config"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 	"github.com/farrellm/rental-bot/migrations"
@@ -97,6 +99,19 @@ func authed(t *testing.T, opts Options) (Options, func(method, target string, bo
 	opts.Guard = guard
 	if opts.DB == nil {
 		opts.DB = healthyDB()
+	}
+	// Documents need somewhere to land. A temp directory per test keeps the
+	// content-addressed store real rather than faked -- dedupe and the
+	// disposition allowlist are both about what actually lands on disk.
+	if opts.Blobs == nil {
+		blobs, err := blob.New(filepath.Join(t.TempDir(), "blobs"))
+		if err != nil {
+			t.Fatalf("blob.New: %v", err)
+		}
+		opts.Blobs = blobs
+	}
+	if opts.Config.Storage.MaxUploadBytes == 0 {
+		opts.Config.Storage.MaxUploadBytes = config.Default().Storage.MaxUploadBytes
 	}
 
 	return opts, func(method, target string, body io.Reader) *http.Request {
