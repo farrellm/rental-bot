@@ -18,9 +18,11 @@ import (
 	"github.com/farrellm/rental-bot/internal/auth"
 	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
+	"github.com/farrellm/rental-bot/internal/gmail"
 	"github.com/farrellm/rental-bot/internal/httpapi"
 	"github.com/farrellm/rental-bot/internal/jobs"
 	"github.com/farrellm/rental-bot/internal/scheduler"
+	"github.com/farrellm/rental-bot/internal/secret"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/version"
 	"github.com/farrellm/rental-bot/migrations"
@@ -122,6 +124,13 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 
 	ticker := scheduler.New(queue, runner.Notify, logger)
 
+	// Ingestion is optional. A fresh clone has no Google project, and the whole
+	// subsystem stays unbuilt rather than being built and left to fail: no
+	// handlers, no scheduled polls, and a screen that says it is not configured.
+	if err := wireIngestion(cfg, repo, blobs, runner, ticker, logger); err != nil {
+		return err
+	}
+
 	started := time.Now()
 	handler := httpapi.New(httpapi.Options{
 		Config:    cfg,
@@ -206,6 +215,64 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 	}
 
 	logger.Info("stopped", "uptime", time.Since(started).Round(time.Second).String())
+	return nil
+}
+
+// wireIngestion builds the Gmail subsystem, or nothing at all.
+//
+// A blank gmail.client_id builds none of it. That is a working state and the
+// one a fresh clone is in — not an error, and not a mailbox that looks
+// disconnected when no mailbox was ever asked for.
+func wireIngestion(
+	cfg config.Config,
+	repo *store.Repo,
+	blobs *blob.Store,
+	runner *jobs.Runner,
+	ticker *scheduler.Scheduler,
+	logger *slog.Logger,
+) error {
+	if !cfg.Gmail.Enabled() {
+		logger.Info("email ingestion is not configured; set gmail.client_id to enable it")
+		return nil
+	}
+
+	// config.Validate has already refused an ingestion setup without a key, so
+	// this failing means the key itself is unusable.
+	box, err := secret.New(cfg.Secrets.Key)
+	if err != nil {
+		return fmt.Errorf("email ingestion needs the encryption key: %w", err)
+	}
+	archive, err := gmail.NewArchive(cfg.Storage.RawEmail)
+	if err != nil {
+		return err
+	}
+
+	tokens := gmail.NewStore(repo, box, cfg, strings.TrimSuffix(cfg.Server.BaseURL, "/")+gmail.CallbackPath)
+	syncer := gmail.NewSyncer(tokens, repo, blobs, archive, cfg.Gmail, logger)
+	watcher := gmail.NewWatcher(tokens, cfg.Gmail.Topic)
+	gmail.Register(runner, syncer, watcher, logger)
+
+	// The poller, not the webhook, is what makes ingestion reliable (§4.2).
+	// Pub/Sub is at-least-once and occasionally lossy, and a watch can lapse
+	// silently; every step is idempotent, so the overlap costs nothing.
+	ticker.Add(scheduler.Task{
+		Name:  gmail.KindSync,
+		Kind:  gmail.KindSync,
+		Every: cfg.Gmail.PollInterval.Duration,
+	})
+	// At start as well as on the tick: a process that has been down for a week
+	// has a lapsed watch and should not wait a day to find that out.
+	ticker.Add(scheduler.Task{
+		Name:    gmail.KindRenewWatch,
+		Kind:    gmail.KindRenewWatch,
+		Every:   cfg.Gmail.WatchRenewInterval.Duration,
+		AtStart: true,
+	})
+
+	logger.Info("email ingestion is configured",
+		"poll_interval", cfg.Gmail.PollInterval.Duration,
+		"senders", len(cfg.Gmail.AllowedSenders),
+	)
 	return nil
 }
 
