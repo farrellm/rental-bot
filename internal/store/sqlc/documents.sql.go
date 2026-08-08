@@ -12,12 +12,14 @@ import (
 const createDocument = `-- name: CreateDocument :one
 INSERT INTO documents (
     property_id, kind, title, original_filename, mime, size_bytes,
-    sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at
+    sha256, storage_path, extracted_text, uploaded_by, source_message_id,
+    created_at, updated_at
 ) VALUES (
     ?, ?, ?, ?, ?, ?,
-    ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?,
+    ?, ?
 )
-RETURNING id, property_id, kind, title, original_filename, mime, size_bytes, sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at
+RETURNING id, property_id, kind, title, original_filename, mime, size_bytes, sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at, source_message_id
 `
 
 type CreateDocumentParams struct {
@@ -31,10 +33,14 @@ type CreateDocumentParams struct {
 	StoragePath      string
 	ExtractedText    string
 	UploadedBy       *int64
+	SourceMessageID  *int64
 	CreatedAt        string
 	UpdatedAt        string
 }
 
+// source_message_id is null for a document the operator uploaded and set for
+// one that arrived attached to an email. It is provenance, not a link: what the
+// document evidences is document_links' business.
 func (q *Queries) CreateDocument(ctx context.Context, arg CreateDocumentParams) (Document, error) {
 	row := q.db.QueryRowContext(ctx, createDocument,
 		arg.PropertyID,
@@ -47,6 +53,7 @@ func (q *Queries) CreateDocument(ctx context.Context, arg CreateDocumentParams) 
 		arg.StoragePath,
 		arg.ExtractedText,
 		arg.UploadedBy,
+		arg.SourceMessageID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -65,6 +72,7 @@ func (q *Queries) CreateDocument(ctx context.Context, arg CreateDocumentParams) 
 		&i.UploadedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SourceMessageID,
 	)
 	return i, err
 }
@@ -137,7 +145,7 @@ func (q *Queries) DeleteDocumentLink(ctx context.Context, arg DeleteDocumentLink
 }
 
 const getDocument = `-- name: GetDocument :one
-SELECT id, property_id, kind, title, original_filename, mime, size_bytes, sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at FROM documents WHERE id = ? LIMIT 1
+SELECT id, property_id, kind, title, original_filename, mime, size_bytes, sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at, source_message_id FROM documents WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetDocument(ctx context.Context, id int64) (Document, error) {
@@ -157,12 +165,13 @@ func (q *Queries) GetDocument(ctx context.Context, id int64) (Document, error) {
 		&i.UploadedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SourceMessageID,
 	)
 	return i, err
 }
 
 const getDocumentBySHA = `-- name: GetDocumentBySHA :one
-SELECT id, property_id, kind, title, original_filename, mime, size_bytes, sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at FROM documents WHERE sha256 = ? LIMIT 1
+SELECT id, property_id, kind, title, original_filename, mime, size_bytes, sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at, source_message_id FROM documents WHERE sha256 = ? LIMIT 1
 `
 
 // Content addressing means the hash is the identity: an upload that hashes to
@@ -184,6 +193,7 @@ func (q *Queries) GetDocumentBySHA(ctx context.Context, sha256 string) (Document
 		&i.UploadedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SourceMessageID,
 	)
 	return i, err
 }
@@ -225,7 +235,7 @@ func (q *Queries) ListDocumentLinks(ctx context.Context, documentID int64) ([]Do
 }
 
 const listDocumentsByEntity = `-- name: ListDocumentsByEntity :many
-SELECT documents.id, documents.property_id, documents.kind, documents.title, documents.original_filename, documents.mime, documents.size_bytes, documents.sha256, documents.storage_path, documents.extracted_text, documents.uploaded_by, documents.created_at, documents.updated_at
+SELECT documents.id, documents.property_id, documents.kind, documents.title, documents.original_filename, documents.mime, documents.size_bytes, documents.sha256, documents.storage_path, documents.extracted_text, documents.uploaded_by, documents.created_at, documents.updated_at, documents.source_message_id
 FROM documents
 JOIN document_links ON document_links.document_id = documents.id
 WHERE document_links.entity_type = ?1
@@ -263,6 +273,7 @@ func (q *Queries) ListDocumentsByEntity(ctx context.Context, arg ListDocumentsBy
 			&i.UploadedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SourceMessageID,
 		); err != nil {
 			return nil, err
 		}
@@ -278,7 +289,7 @@ func (q *Queries) ListDocumentsByEntity(ctx context.Context, arg ListDocumentsBy
 }
 
 const listDocumentsByPropertyAfter = `-- name: ListDocumentsByPropertyAfter :many
-SELECT id, property_id, kind, title, original_filename, mime, size_bytes, sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at FROM documents
+SELECT id, property_id, kind, title, original_filename, mime, size_bytes, sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at, source_message_id FROM documents
 WHERE property_id = ?1
   AND (created_at < ?2
        OR (created_at = ?2 AND id < ?3))
@@ -321,6 +332,7 @@ func (q *Queries) ListDocumentsByPropertyAfter(ctx context.Context, arg ListDocu
 			&i.UploadedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SourceMessageID,
 		); err != nil {
 			return nil, err
 		}
@@ -337,7 +349,7 @@ func (q *Queries) ListDocumentsByPropertyAfter(ctx context.Context, arg ListDocu
 
 const listDocumentsByPropertyFirstPage = `-- name: ListDocumentsByPropertyFirstPage :many
 
-SELECT id, property_id, kind, title, original_filename, mime, size_bytes, sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at FROM documents
+SELECT id, property_id, kind, title, original_filename, mime, size_bytes, sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at, source_message_id FROM documents
 WHERE property_id = ?1
 ORDER BY created_at DESC, id DESC
 LIMIT ?2
@@ -374,6 +386,7 @@ func (q *Queries) ListDocumentsByPropertyFirstPage(ctx context.Context, arg List
 			&i.UploadedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SourceMessageID,
 		); err != nil {
 			return nil, err
 		}
@@ -397,7 +410,7 @@ UPDATE documents SET
     extracted_text    = ?,
     updated_at        = ?
 WHERE id = ?
-RETURNING id, property_id, kind, title, original_filename, mime, size_bytes, sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at
+RETURNING id, property_id, kind, title, original_filename, mime, size_bytes, sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at, source_message_id
 `
 
 type UpdateDocumentParams struct {
@@ -436,6 +449,7 @@ func (q *Queries) UpdateDocument(ctx context.Context, arg UpdateDocumentParams) 
 		&i.UploadedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SourceMessageID,
 	)
 	return i, err
 }

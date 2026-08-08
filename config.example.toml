@@ -29,6 +29,52 @@ raw_email = "data/raw-email"
 # the request body, so anything past it is refused before it reaches the disk.
 max_upload_bytes = 26214400 # 25 MiB
 
+[gmail]
+# Email ingestion. A blank client_id is the off switch: the process runs
+# without a Google project, and the intake screen says so rather than
+# pretending to be disconnected. Set it and everything below is required.
+#
+# The OAuth client is a "Web application" client with
+# <base_url>/api/v1/gmail/callback as an authorized redirect URI.
+client_id = ""
+# The Pub/Sub topic users.watch publishes to. Grant
+# gmail-api-push@system.gserviceaccount.com the Publisher role on it, and point
+# a push subscription at <base_url>/webhooks/gmail.
+topic = ""
+# Only mail from these addresses is processed. Everything else is labelled and
+# stored `ignored` — a public-ish inbox will receive spam, and this is the
+# first and cheapest defense.
+allowed_senders = []
+# Labels applied in Gmail, so the mailbox shows what this process did.
+processed_label = "rental-bot/processed"
+ignored_label = "rental-bot/ignored"
+# The fallback poller's period. This, and not the webhook, is what makes
+# ingestion reliable: Pub/Sub is at-least-once and occasionally lossy, and a
+# watch can lapse silently. Every step is idempotent, so the overlap is free.
+poll_interval = "10m"
+# Google expires a watch after 7 days. Daily renewal leaves six days of
+# failures before anything is actually lost.
+watch_renew_interval = "24h"
+# The largest attachment that will be downloaded. Anything past it is recorded
+# with the reason and skipped, rather than silently dropped.
+max_attachment_bytes = 26214400 # 25 MiB
+
+[gmail.pubsub]
+# What an incoming push has to prove. The push carries an OIDC JWT and nothing
+# else worth trusting; both of these have to match or the request is refused.
+audience = ""
+service_account = ""
+
+[jobs]
+# The worker pool draining the jobs table. Writes serialize on one SQLite
+# connection regardless, so this bounds overlapping network calls rather than
+# database throughput.
+workers = 2
+poll_interval = "5s"
+# How long a claimed job may stay locked before the runner assumes the worker
+# holding it is gone and returns it to pending.
+lease_timeout = "10m"
+
 [log]
 # debug | info | warn | error
 level = "info"
@@ -37,7 +83,12 @@ format = "text"
 
 # Secrets come from the environment, never from here:
 #
-#   RENTAL_BOT_SECRET_KEY       the AES-GCM key protecting encrypted columns
-#   RENTAL_BOT_SECRET_KEY_FILE  a path to that key; the file must be mode 0600
+#   RENTAL_BOT_SECRET_KEY          the AES-GCM key protecting encrypted columns
+#   RENTAL_BOT_SECRET_KEY_FILE     a path to that key; the file must be mode 0600
+#   RENTAL_BOT_GMAIL_CLIENT_SECRET the OAuth client secret
+#
+# The encryption key is required once gmail.client_id is set: the refresh token
+# is stored encrypted, so a database copy without the key does not hand over
+# the mailbox.
 #
 # Setting a [secrets] table in this file has no effect.

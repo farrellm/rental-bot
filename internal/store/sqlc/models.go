@@ -22,6 +22,7 @@ type Document struct {
 	UploadedBy       *int64
 	CreatedAt        string
 	UpdatedAt        string
+	SourceMessageID  *int64
 }
 
 type DocumentLink struct {
@@ -31,6 +32,51 @@ type DocumentLink struct {
 	EntityID   int64
 	CreatedAt  string
 	UpdatedAt  string
+}
+
+type EmailAttachment struct {
+	ID             int64
+	EmailMessageID int64
+	PartID         string
+	Filename       string
+	Mime           string
+	SizeBytes      int64
+	DocumentID     *int64
+	SkippedReason  string
+	CreatedAt      string
+	UpdatedAt      string
+}
+
+type EmailMessage struct {
+	ID             int64
+	GmailMessageID string
+	ThreadID       string
+	FromAddr       string
+	ToAddr         string
+	Subject        string
+	ReceivedAt     string
+	Snippet        string
+	RawPath        string
+	Status         string
+	Error          string
+	CreatedAt      string
+	UpdatedAt      string
+}
+
+type GmailAccount struct {
+	ID              int64
+	Address         string
+	RefreshTokenEnc string
+	Scopes          string
+	ConnectedAt     string
+	HistoryID       string
+	WatchExpiresAt  *string
+	LastSyncAt      *string
+	LastSyncCount   int64
+	LastError       string
+	Status          string
+	CreatedAt       string
+	UpdatedAt       string
 }
 
 type Job struct {
