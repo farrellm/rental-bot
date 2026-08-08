@@ -40,7 +40,7 @@ type Config struct {
 
 // Server holds HTTP listener settings.
 type Server struct {
-	// Addr is the listen address, e.g. ":8080".
+	// Addr is the listen address, e.g. ":8082".
 	Addr string `toml:"addr"`
 	// BaseURL is the externally reachable origin, used to build the deep
 	// links that email replies and Telegram messages carry.
@@ -174,8 +174,8 @@ func (d Duration) MarshalText() ([]byte, error) {
 func Default() Config {
 	return Config{
 		Server: Server{
-			Addr:    ":8080",
-			BaseURL: "http://localhost:8080",
+			Addr:    ":8082",
+			BaseURL: "http://localhost:8082",
 		},
 		Database: Database{
 			Path:         "data/rental.db",

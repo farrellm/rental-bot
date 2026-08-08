@@ -41,7 +41,7 @@ so only someone changing a query needs the tool.
 ```sh
 make build                          # bin/rental-bot, with the SPA embedded
 ./bin/rental-bot -create-user alice # prompts for a password, twice
-make dev                            # API on :8080, Vite on :5174, hot reload
+make dev                            # API on :8082, Vite on :5174, hot reload
 ```
 
 Then open <http://localhost:5174> and sign in.
@@ -60,8 +60,8 @@ clone; the ones that need `node_modules` install it themselves.
 | Target | Effect |
 | --- | --- |
 | `make dev` | Runs the API and the Vite dev server together under `-j2`. One Ctrl-C stops both. Use this for day-to-day work. |
-| `make dev-api` | The API alone on `:8080`, via `go run`. Serves JSON and the "frontend not in this binary" page. |
-| `make dev-web` | Vite alone on `:5174`, proxying `/api`, `/healthz`, and `/readyz` to `:8080`. |
+| `make dev-api` | The API alone on `:8082`, via `go run`. Serves JSON and the "frontend not in this binary" page. |
+| `make dev-web` | Vite alone on `:5174`, proxying `/api`, `/healthz`, and `/readyz` to `:8082`. |
 | `make watch` | The API with live reload, via [wgo](https://github.com/bokwoon95/wgo). Restarts on `.go` and `.sql` changes — the latter because migrations are embedded, so a new one only takes effect on a rebuild. |
 | `make watch-dev` | `watch` and `dev-web` together: both halves reload. |
 

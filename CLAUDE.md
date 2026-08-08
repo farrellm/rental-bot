@@ -19,7 +19,7 @@ alert bus and Telegram pairing, outbound only.
 | Command | Effect |
 | --- | --- |
 | `make check` | gofmt, vet, staticcheck, Go tests, frontend type-check. **A commit has to pass this.** |
-| `make dev` | API on :8080 and Vite on :5174 together; one Ctrl-C stops both |
+| `make dev` | API on :8082 and Vite on :5174 together; one Ctrl-C stops both |
 | `make build` | Frontend, then the binary with the SPA embedded, into `bin/` |
 | `make migrate` | Apply pending migrations and exit |
 | `make generate` | Regenerate the sqlc query layer; skips when sqlc is absent |

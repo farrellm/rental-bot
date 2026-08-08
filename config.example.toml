@@ -9,10 +9,10 @@
 [server]
 # Listen address. Put Caddy in front of this for TLS; Pub/Sub push requires a
 # valid public HTTPS endpoint.
-addr = ":8080"
+addr = ":8082"
 # The origin the operator reaches the app on. Deep links in email replies and
 # Telegram messages are built from it.
-base_url = "http://localhost:8080"
+base_url = "http://localhost:8082"
 
 [database]
 # SQLite file. Its parent directory is created at startup if missing.

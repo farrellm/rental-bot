@@ -31,10 +31,10 @@ help: ## List the targets
 dev: ## Run the API and the Vite dev server together; one Ctrl-C stops both
 	@$(MAKE) -j2 --no-print-directory dev-api dev-web
 
-dev-api: ## Run the API alone on :8080, serving JSON only
+dev-api: ## Run the API alone on :8082, serving JSON only
 	go run ./cmd/rental-bot -config $(CONFIG)
 
-dev-web: web-deps ## Run Vite alone on :5174, proxying the API to :8080
+dev-web: web-deps ## Run Vite alone on :5174, proxying the API to :8082
 	@$(NPM) run dev
 
 watch: ## Run the API with live reload, restarting on .go and .sql changes
