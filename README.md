@@ -14,11 +14,19 @@ plan.
 
 ## Status
 
-**M2** — documents, blob store, manual transactions / repairs / leases. You
-can sign in, put properties on file with their units, file documents against
-them, keep a cash-flow ledger, run repairs with a dated history, and record
-leases and tenants. Occupancy is derived from the lease dates rather than
-stored. The email ingestion the product exists for arrives with M3 and M4.
+**M3** — Gmail watch, webhook, fallback poller, raw archive. Connect a mailbox
+and forwarded mail files itself: the message is archived as a raw `.eml`,
+recorded in the register, and its attachments land in the document store. The
+Intake screen says whether mail is still arriving.
+
+Everything before it still holds. You can sign in, put properties on file with
+their units, file documents against them, keep a cash-flow ledger, run repairs
+with a dated history, and record leases and tenants; occupancy is derived from
+the lease dates rather than stored.
+
+M3 stops at the door of the LLM. Nothing is classified, extracted, or proposed
+— that gate is M4's, and forwarded email is untrusted input that should reach a
+model with no capability to act on it.
 
 ## Requirements
 
@@ -149,9 +157,56 @@ RENTAL_BOT_SERVER_ADDR=:9000 RENTAL_BOT_LOG_FORMAT=json make dev-api
 `storage.max_upload_bytes` caps one document at 25 MiB by default. It is a cap
 on the request body, so anything larger is refused before it reaches the disk.
 
-Secrets are never read from the config file. The AES-GCM key protecting
-encrypted columns comes from `RENTAL_BOT_SECRET_KEY`, or from a file named by
-`RENTAL_BOT_SECRET_KEY_FILE` that must be mode `0600`.
+Secrets are never read from the config file:
+
+| Variable | Purpose |
+| --- | --- |
+| `RENTAL_BOT_SECRET_KEY` | The AES-GCM key protecting encrypted columns. |
+| `RENTAL_BOT_SECRET_KEY_FILE` | A path to that key. The file must be mode `0600`. |
+| `RENTAL_BOT_GMAIL_CLIENT_SECRET` | The OAuth client secret. |
+
+The encryption key becomes **required** once `gmail.client_id` is set: the Gmail
+refresh token is stored encrypted, so a database copy without the key does not
+hand over the mailbox.
+
+## Email ingestion
+
+A blank `gmail.client_id` is the off switch. The application runs without a
+Google project, the Intake screen says which keys are missing, and `/readyz`
+reports the subsystem as fine rather than failing over something nobody asked
+for.
+
+Turning it on takes four things in Google Cloud:
+
+1. **An OAuth client**, type *Web application*, with
+   `<base_url>/api/v1/gmail/callback` as an authorized redirect URI. Its id goes
+   in `gmail.client_id`; its secret goes in `RENTAL_BOT_GMAIL_CLIENT_SECRET`.
+2. **A Pub/Sub topic**, named in `gmail.topic` in Google's full form
+   (`projects/<project>/topics/<topic>`), with the Publisher role granted to
+   `gmail-api-push@system.gserviceaccount.com` — that is the account Gmail
+   publishes as, and without the grant `users.watch` fails.
+3. **A push subscription** on that topic pointing at
+   `<base_url>/webhooks/gmail`, with an OIDC token whose service account goes in
+   `gmail.pubsub.service_account` and whose audience goes in
+   `gmail.pubsub.audience`. Both are checked on every push, and a request that
+   fails either is a `401`.
+4. **`gmail.allowed_senders`** — only mail from these addresses is processed.
+   Everything else is labelled and stored `ignored`. A public-ish inbox will
+   receive spam, and this is the first and cheapest defense.
+
+Then sign in, open **Intake**, and press *Connect Gmail*.
+
+**The poller, not the webhook, is what makes ingestion reliable.** Pub/Sub is
+at-least-once and occasionally lossy, and a `watch` can lapse silently, so the
+scheduler walks the same history every `gmail.poll_interval` regardless. Every
+step is idempotent on the Gmail message id, so the overlap costs one skipped
+insert per message. The webhook only makes it fast.
+
+Forwarded mail lands in three places: the raw `.eml` under `storage.raw_email`,
+a row in the register, and each attachment in the content-addressed document
+store. Attachments are filed against no property — matching an address to a
+property is deterministic Go over an extracted string, and the extraction that
+produces that string is M4's.
 
 ## Endpoints
 
@@ -195,6 +250,19 @@ Documents, the ledger, and tenancy:
 | `POST/DELETE /api/v1/leases/{id}/tenants` | Who is on a lease. |
 | `GET/POST /api/v1/tenants`, `GET/PATCH/DELETE /api/v1/tenants/{id}` | Tenants, portfolio-wide. |
 | `GET/POST /api/v1/vendors`, `GET/PATCH/DELETE /api/v1/vendors/{id}` | Vendors, portfolio-wide. |
+
+Email ingestion:
+
+| Path | Purpose |
+| --- | --- |
+| `POST /webhooks/gmail` | The Pub/Sub push. Verifies the OIDC token, queues a sync, and answers immediately. **Outside the session**, because Pub/Sub has no cookie — the token is the whole of its authorization. |
+| `GET /api/v1/gmail` | The mailbox's standing: connection, watch, cursor, last sync, and what the register holds. |
+| `POST /api/v1/gmail/connect` | Returns the Google consent URL. The browser navigates to it. |
+| `GET /api/v1/gmail/callback` | Where Google sends the operator back. The `state` is signed and bound to the session. |
+| `DELETE /api/v1/gmail` | Revokes the grant at Google and forgets the account. The mail already on file stays. |
+| `POST /api/v1/gmail/sync` | Queues a sync now. `queued: false` means one was already waiting. |
+| `GET /api/v1/email-messages`, `GET /api/v1/email-messages/{id}` | The register, newest first, with attachments inline. |
+| `GET /api/v1/email-messages/{id}/raw` | The archived `.eml`, always as an attachment. |
 
 Money on the wire is a signed integer count of cents. On a ledger entry the
 sign is the whole distinction: income positive, expense negative. A repair

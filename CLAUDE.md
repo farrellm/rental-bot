@@ -8,9 +8,9 @@ pipeline, the LLM boundary, valuations, alerting, and the milestone plan. Read
 it before proposing anything structural; this file records only what the code
 does not already say.
 
-Current milestone: **M2 complete** (documents, blob store, manual
-transactions / repairs / leases). Next is M3 — Gmail watch, webhook, fallback
-poller, raw archive.
+Current milestone: **M3 complete** (Gmail watch, webhook, fallback poller, raw
+archive, plus the job queue and scheduler they run on). Next is M3.5 — the
+alert bus and Telegram pairing, outbound only.
 
 ## Commands
 
@@ -37,16 +37,21 @@ internal/store      SQLite pools, migration runner, sqlc queries
 internal/auth       argon2id, sessions, CSRF, rate limiting, middleware
 internal/domain     Money, address normalization
 internal/blob       content-addressed store for document bytes
+internal/secret     AES-GCM for the encrypted columns, HKDF off the secret key
+internal/gmail      OAuth, watch, history sync, MIME parse, raw archive, OIDC
+internal/jobs       SQLite-backed queue and the worker pool that drains it
+internal/scheduler  the ticker that enqueues periodic work
 internal/httpapi    handlers, DTOs, middleware, problem+json, SPA serving
 internal/version    ldflags-stamped build identity
 migrations/         NNNN_name.sql, embedded
 web/                Vite React app, plus the build-tagged embed
 ```
 
-The packages in `docs/DESIGN.md` §10 that are not listed here — `gmail`,
-`ingest`, `llm`, `valuation`, `alert`, `telegram`, `jobs`, `scheduler` —
-arrive with the milestones that need them. Don't create them empty ahead of
-time.
+The packages in `docs/DESIGN.md` §10 that are not listed here — `ingest`,
+`llm`, `valuation`, `alert`, `telegram` — arrive with the milestones that need
+them. Don't create them empty ahead of time. `internal/secret` is not in §10's
+list; it exists because §9.2's field encryption needed a home once M3 added the
+first encrypted column.
 
 ## sqlc
 
@@ -133,6 +138,45 @@ decision, not a refactor.
 - **A `sqlc.narg` in a SQLite query needs a `CAST(... AS TEXT)` around it**, or
   sqlc's inference gives up and types the parameter `interface{}`. The casts in
   `transactions.sql` are load-bearing; don't tidy them away.
+- **The poller, not the webhook, is what makes ingestion reliable.** Pub/Sub is
+  at-least-once and occasionally lossy and a `watch` lapses silently, so the
+  scheduler walks the same history every `gmail.poll_interval` regardless. The
+  webhook only makes it fast. Anything that would make the poll conditional on
+  the push is a change to the reliability story, not an optimisation.
+- **`email_messages.gmail_message_id` is UNIQUE, and that one constraint is the
+  idempotency key for the whole pipeline.** Every step reads before it writes,
+  so the poller re-walking what the push already delivered costs one skipped
+  insert per message. Adding a step that is not idempotent on it breaks the
+  overlap that the design rests on.
+- **The raw `.eml` is archived before the row is inserted.** The archive exists
+  so a parser fix can be replayed against what actually arrived, and a message
+  that fails to parse is exactly the one whose bytes are wanted. A message too
+  large to fetch gets a `failed` row with the reason and no `raw_path` — it
+  will be the same size next time, so retrying is pointless and silence is
+  worse.
+- **The sender allowlist runs before anything is filed.** A message from an
+  address outside it is stored `ignored` with no attachments taken. A
+  public-ish inbox receives spam; this is the first and cheapest defense.
+- **The Pub/Sub push carries a `historyId` that is never read.** Believing it
+  would let anyone who captured a token choose where in history this process
+  resumes from. The sync takes its cursor from `gmail_account`. The push's OIDC
+  token is verified against a fixed `RS256` — never the algorithm the token
+  names — and an unconfigured verifier refuses everything, because failing open
+  puts an unauthenticated enqueue endpoint on the public internet.
+- **A third-party redirect carries `auth.IssueState`/`CheckState`**, signed and
+  bound to the session. Without the binding an attacker starts the OAuth flow
+  with their own account and hands the callback to the operator, whose session
+  then has the attacker's mailbox attached to it.
+- **A job handler must be idempotent**, because the queue is at-least-once by
+  construction: a process killed after the work and before the row is marked
+  done runs it again. `attempts` increments on *claim*, not on failure, so a
+  payload that kills its worker still spends a try rather than retrying
+  forever.
+- **A blank `gmail.client_id` is the off switch and a working state.** A fresh
+  clone has no Google project. The subsystem is not built, the routes answer
+  503 naming the missing keys, and `/readyz` reports it OK — a check that fails
+  over a subsystem nobody asked for is a check that teaches its reader to
+  ignore it.
 - **Nothing from an LLM reaches the ledger except through `ingest_proposals`**
   (from M4). Extraction runs tool-free with `MaxSteps: 1`, because forwarded
   email is untrusted input.
@@ -159,8 +203,14 @@ decision, not a refactor.
   40rem the tabs wrap, so the current one gets four edges instead — a joint
   drawn to a row that is not the card reads as a bug.
 - **The stamp is the app's state machine.** One component says OPERATIONAL,
-  DEGRADED, NO CONTACT, ACTIVE, PROSPECT, SOLD, AMENDING, REFUSED, and from M2
-  OPEN, SCHEDULED, IN PROGRESS, DONE, WON'T FIX, PENDING, ENDED, TERMINATED.
+  DEGRADED, NO CONTACT, ACTIVE, PROSPECT, SOLD, AMENDING, REFUSED; from M2
+  OPEN, SCHEDULED, IN PROGRESS, DONE, WON'T FIX, PENDING, ENDED, TERMINATED;
+  and from M3 WATCHING, LAPSED, REVOKED, NOT CONNECTED, NOT SET UP for the
+  mailbox, plus RECEIVED, PARSING, NEEDS REVIEW, APPLIED, REJECTED, IGNORED,
+  FAILED for one message. All seven message words exist now even though M3
+  writes three, so the register can never show a state it has no word for.
+  NOT SET UP and NOT CONNECTED are different claims and both are fine: nobody
+  asked for ingestion, versus somebody did and did not finish.
   Every variant is one `color:` declaration, because the border, inner ring,
   and divider all take `currentcolor`. It stays the only thing that moves.
 - **The lease term rule is the one drawn thing in the application** and it
@@ -211,7 +261,7 @@ Standard library `testing`, table-driven where there is more than one case. No
 assertion library. Store tests open a real SQLite file under `t.TempDir()`;
 `httpapi` tests substitute the small `Health` interface rather than a database.
 
-## Known gaps at M2
+## Known gaps at M3
 
 - **`audit_log` is still not written.** §8.5 implies web mutations are audited,
   but the table is in no migration and §11 assigns it to no milestone.
@@ -226,10 +276,25 @@ assertion library. Store tests open a real SQLite file under `t.TempDir()`;
   at M2.** Widening it for a later milestone's entity means rebuilding the
   table, which is the price of a typo'd type failing loudly instead of
   silently orphaning a link.
-- **`transactions.proposal_id` and `documents.source_message_id` are absent**
-  on purpose: with `foreign_keys=ON` a reference to a table that does not exist
-  yet fails at INSERT rather than at CREATE. M3 and M4 add each column with its
-  constraint.
+- **`transactions.proposal_id` is still absent**, for the reason
+  `documents.source_message_id` was until M3 added it: with `foreign_keys=ON` a
+  reference to a table that does not exist yet fails at INSERT rather than at
+  CREATE, so the milestone that creates the target adds the column with its
+  constraint. M4 adds this one.
+- **An ingested attachment is filed against no property.** Matching an address
+  to a property is deterministic Go over an extracted string, and the
+  extraction that produces that string is M4's. The bytes are on file and the
+  association is not; that split is the point of the content-addressed store.
+- **`gmail.send` is in the requested scopes and nothing uses it.** §4.2 step 7
+  replies in-thread once ingestion resolves, which needs M4's proposal to have
+  resolved into something. Asking for the scope now means the operator consents
+  once instead of being sent back through a consent screen by an upgrade.
+- **The job queue has no dead-letter handling beyond the row.** A job past
+  `max_attempts` is `failed` and stays there; nothing retries it and nothing
+  alerts. M3.5's alert bus is what gives that a voice.
+- **Nothing prunes the raw `.eml` archive.** §12's first open question — keep
+  forever or prune after N years — is still open, and the year/month directory
+  layout is what makes either answer cheap.
 - **`PATCH`/`DELETE /api/v1/units/{id}`, and the repair, lease, tenant and
   vendor routes, are not all in §7.1's table.** The screens need them, and the
   endpoint list in the README is the current authority.
@@ -239,7 +304,9 @@ assertion library. Store tests open a real SQLite file under `t.TempDir()`;
 - Migrations land only the tables a milestone touches. The rest of
   `docs/DESIGN.md` §3 arrives milestone by milestone.
 - Property detail has five of §7.2's eight tabs. Insurance, Mortgage, and Value
-  arrive with the milestones that fill them.
+  arrive with the milestones that fill them. §7.2's Settings screen is now the
+  Intake screen for its Gmail half; Telegram, provider health, and backup status
+  join it at M3.5, M5, and M7.
 - **List pagination works but nothing pages yet** — every index fetches one
   page and the frontend ignores `next_cursor`. It matters past 50 properties,
   or a property with a long ledger.
