@@ -2,9 +2,12 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/farrellm/rental-bot/internal/gmail"
 )
 
 // Check is one named readiness condition.
@@ -50,9 +53,6 @@ func (s *server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 }
 
 // runChecks evaluates every readiness condition.
-//
-// M0 knows about the database. The Gmail token and last-sync recency checks
-// (docs/DESIGN.md §9.3) join this list when M3 gives them something to read.
 func (s *server) runChecks(ctx context.Context) []Check {
 	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
 	defer cancel()
@@ -82,7 +82,105 @@ func (s *server) runChecks(ctx context.Context) []Check {
 	default:
 		checks = append(checks, Check{Name: "schema", OK: true, Detail: "version " + strconv.Itoa(version)})
 	}
+
+	return append(checks, s.ingestionChecks(ctx)...)
+}
+
+// ingestionChecks reports on the Gmail connection, its watch, and its sync
+// recency (docs/DESIGN.md §9.3).
+//
+// M3 is the first milestone where this system can fail silently: a revoked
+// grant, a lapsed watch, a poller that stopped. Every one of those looks
+// exactly like "no mail arrived today" from the outside, which is why they are
+// checks rather than something to notice.
+func (s *server) ingestionChecks(ctx context.Context) []Check {
+	// Not configured is not a fault. A fresh clone has no Google project, and
+	// /readyz reporting 503 over an unwanted subsystem is a check that teaches
+	// its reader to ignore it.
+	if !s.cfg.Gmail.Enabled() || s.gmail == nil {
+		return []Check{{
+			Name: "gmail", OK: true,
+			Detail: "Not configured. Set gmail.client_id to enable email ingestion.",
+		}}
+	}
+
+	account, err := s.gmail.Account(ctx)
+	switch {
+	case errors.Is(err, gmail.ErrNotConnected):
+		return []Check{{
+			Name: "gmail", OK: true,
+			Detail: "Configured but no mailbox is connected. Connect one on the Intake screen.",
+		}}
+	case err != nil:
+		loggerFrom(ctx).Error("gmail check failed", "error", err)
+		return []Check{{
+			Name:   "gmail",
+			Detail: "The connected account could not be read. " + err.Error(),
+		}}
+	}
+
+	checks := make([]Check, 0, 3)
+	switch account.Status {
+	case "revoked":
+		// The one condition here that no amount of waiting fixes.
+		checks = append(checks, Check{
+			Name:   "gmail",
+			Detail: "The Google authorization was revoked. Reconnect the mailbox on the Intake screen.",
+		})
+	case "degraded":
+		checks = append(checks, Check{
+			Name:   "gmail",
+			Detail: "The last sync failed: " + account.LastError,
+		})
+	default:
+		checks = append(checks, Check{Name: "gmail", OK: true, Detail: account.Address})
+	}
+
+	now := time.Now().UTC()
+	if account.WatchLapsed(now) {
+		// A warning rather than a fault: the poller carries ingestion on its
+		// own, so this is slower, not stopped, and it says so.
+		checks = append(checks, Check{
+			Name: "gmail_watch", OK: true,
+			Detail: "No live push registration. Mail still arrives on the " +
+				s.cfg.Gmail.PollInterval.String() + " poll.",
+		})
+	} else {
+		checks = append(checks, Check{
+			Name: "gmail_watch", OK: true,
+			Detail: "renews before " + account.WatchExpiresAt.Format(time.RFC3339),
+		})
+	}
+
+	checks = append(checks, s.lastSyncCheck(account, now))
 	return checks
+}
+
+// lastSyncCheck reports whether the poller is still running.
+//
+// The threshold is three poll intervals: one missed tick is a slow Gmail, three
+// in a row is something that is not coming back on its own.
+func (s *server) lastSyncCheck(account gmail.Account, now time.Time) Check {
+	stale := 3 * s.cfg.Gmail.PollInterval.Duration
+
+	if account.LastSyncAt == nil {
+		return Check{
+			Name: "gmail_sync", OK: true,
+			Detail: "No sync has run yet.",
+		}
+	}
+	since := now.Sub(*account.LastSyncAt)
+	if since > stale {
+		return Check{
+			Name: "gmail_sync",
+			Detail: "The last sync was " + since.Round(time.Minute).String() +
+				" ago, past the " + stale.String() + " threshold. Check the job queue and the logs.",
+		}
+	}
+	return Check{
+		Name: "gmail_sync", OK: true,
+		Detail: since.Round(time.Second).String() + " ago",
+	}
 }
 
 func allOK(checks []Check) bool {

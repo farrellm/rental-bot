@@ -18,7 +18,11 @@ import (
 	"github.com/farrellm/rental-bot/internal/auth"
 	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
+	"github.com/farrellm/rental-bot/internal/gmail"
 	"github.com/farrellm/rental-bot/internal/httpapi"
+	"github.com/farrellm/rental-bot/internal/jobs"
+	"github.com/farrellm/rental-bot/internal/scheduler"
+	"github.com/farrellm/rental-bot/internal/secret"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/version"
 	"github.com/farrellm/rental-bot/migrations"
@@ -106,17 +110,44 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 	secure := strings.HasPrefix(cfg.Server.BaseURL, "https://")
 	guard := auth.NewGuard(auth.NewSessions(repo), auth.NewCSRF(cfg.Secrets.Key), secure, httpapi.WriteProblem)
 
+	// The queue and the pool that drains it. Everything the webhook and the
+	// scheduler want done goes through here rather than running inline, so a
+	// Pub/Sub push is answered in milliseconds and a Gmail history walk
+	// happens on a worker with retries behind it.
+	queue := jobs.NewQueue(repo)
+	runner := jobs.NewRunner(queue, jobs.RunnerOptions{
+		Workers:      cfg.Jobs.Workers,
+		PollInterval: cfg.Jobs.PollInterval.Duration,
+		LeaseTimeout: cfg.Jobs.LeaseTimeout.Duration,
+		Logger:       logger,
+	})
+
+	ticker := scheduler.New(queue, runner.Notify, logger)
+
+	// Ingestion is optional. A fresh clone has no Google project, and the whole
+	// subsystem stays unbuilt rather than being built and left to fail: no
+	// handlers, no scheduled polls, and a screen that says it is not configured.
+	ingestion, err := wireIngestion(cfg, repo, blobs, runner, ticker, logger)
+	if err != nil {
+		return err
+	}
+
 	started := time.Now()
 	handler := httpapi.New(httpapi.Options{
-		Config:    cfg,
-		DB:        db,
-		Repo:      repo,
-		Blobs:     blobs,
-		Guard:     guard,
-		Limiter:   auth.NewLimiter(),
-		Logger:    logger,
-		SPA:       web.SPA(),
-		StartedAt: started,
+		Config:       cfg,
+		DB:           db,
+		Repo:         repo,
+		Blobs:        blobs,
+		Guard:        guard,
+		Queue:        queue,
+		Runner:       runner,
+		Gmail:        ingestion.tokens,
+		Archive:      ingestion.archive,
+		PushVerifier: ingestion.verifier,
+		Limiter:      auth.NewLimiter(),
+		Logger:       logger,
+		SPA:          web.SPA(),
+		StartedAt:    started,
 	})
 
 	srv := &http.Server{
@@ -139,7 +170,19 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 		"database", cfg.Database.Path,
 		"schema_version", schemaVersion,
 		"spa_embedded", web.Embedded,
+		"workers", cfg.Jobs.Workers,
+		"gmail", cfg.Gmail.Enabled(),
 	)
+
+	// Background work starts before the listener: a job that was mid-run when
+	// the last process stopped should be reclaimed and retried whether or not
+	// anyone is calling the API.
+	//
+	// The context here is the signal context, so a Ctrl-C stops the workers at
+	// the same instant it stops accepting requests, and Stop below is what
+	// waits for the work in flight.
+	runner.Start(ctx)
+	ticker.Start(ctx)
 
 	errc := make(chan error, 1)
 	go func() {
@@ -164,8 +207,95 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 		return fmt.Errorf("shutdown: %w", err)
 	}
 
+	// The workers were already told to stop by the cancelled signal context;
+	// this waits for what is in flight. A job that does not finish in time
+	// stays locked, and the next process's reclaim sweep returns it to pending
+	// -- the same path a kill -9 takes.
+	if err := ticker.Stop(shutdownCtx); err != nil {
+		logger.Warn("scheduler did not stop cleanly", "error", err)
+	}
+	if err := runner.Stop(shutdownCtx); err != nil {
+		logger.Warn("job workers did not stop cleanly", "error", err)
+	}
+
 	logger.Info("stopped", "uptime", time.Since(started).Round(time.Second).String())
 	return nil
+}
+
+// ingestion is what the HTTP layer needs from the Gmail subsystem. Every field
+// is nil when ingestion is not configured, and every route reads that as "not
+// configured" rather than as a failure.
+type ingestion struct {
+	tokens   *gmail.Store
+	archive  *gmail.Archive
+	verifier *gmail.Verifier
+}
+
+// wireIngestion builds the Gmail subsystem, or nothing at all.
+//
+// A blank gmail.client_id builds none of it. That is a working state and the
+// one a fresh clone is in — not an error, and not a mailbox that looks
+// disconnected when no mailbox was ever asked for.
+func wireIngestion(
+	cfg config.Config,
+	repo *store.Repo,
+	blobs *blob.Store,
+	runner *jobs.Runner,
+	ticker *scheduler.Scheduler,
+	logger *slog.Logger,
+) (ingestion, error) {
+	if !cfg.Gmail.Enabled() {
+		logger.Info("email ingestion is not configured; set gmail.client_id to enable it")
+		return ingestion{}, nil
+	}
+
+	// config.Validate has already refused an ingestion setup without a key, so
+	// this failing means the key itself is unusable.
+	box, err := secret.New(cfg.Secrets.Key)
+	if err != nil {
+		return ingestion{}, fmt.Errorf("email ingestion needs the encryption key: %w", err)
+	}
+	archive, err := gmail.NewArchive(cfg.Storage.RawEmail)
+	if err != nil {
+		return ingestion{}, err
+	}
+
+	tokens := gmail.NewStore(repo, box, cfg, strings.TrimSuffix(cfg.Server.BaseURL, "/")+gmail.CallbackPath)
+	syncer := gmail.NewSyncer(tokens, repo, blobs, archive, cfg.Gmail, logger)
+	watcher := gmail.NewWatcher(tokens, cfg.Gmail.Topic)
+	gmail.Register(runner, syncer, watcher, logger)
+
+	// The verifier is built even when the Pub/Sub half is unconfigured. It
+	// refuses everything in that state, which is what the webhook should do
+	// when there is nothing to check a push against.
+	verifier := gmail.NewVerifier(cfg.Gmail.PubSub.Audience, cfg.Gmail.PubSub.ServiceAccount)
+	if !verifier.Configured() {
+		logger.Warn("the Gmail push endpoint will refuse every request; set gmail.pubsub.audience and gmail.pubsub.service_account")
+	}
+
+	// The poller, not the webhook, is what makes ingestion reliable (§4.2).
+	// Pub/Sub is at-least-once and occasionally lossy, and a watch can lapse
+	// silently; every step is idempotent, so the overlap costs nothing.
+	ticker.Add(scheduler.Task{
+		Name:  gmail.KindSync,
+		Kind:  gmail.KindSync,
+		Every: cfg.Gmail.PollInterval.Duration,
+	})
+	// At start as well as on the tick: a process that has been down for a week
+	// has a lapsed watch and should not wait a day to find that out.
+	ticker.Add(scheduler.Task{
+		Name:    gmail.KindRenewWatch,
+		Kind:    gmail.KindRenewWatch,
+		Every:   cfg.Gmail.WatchRenewInterval.Duration,
+		AtStart: true,
+	})
+
+	logger.Info("email ingestion is configured",
+		"poll_interval", cfg.Gmail.PollInterval.Duration,
+		"senders", len(cfg.Gmail.AllowedSenders),
+		"push", verifier.Configured(),
+	)
+	return ingestion{tokens: tokens, archive: archive, verifier: verifier}, nil
 }
 
 // ensureDirs creates the storage directories so a write in a later milestone

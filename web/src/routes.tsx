@@ -10,6 +10,7 @@ import { Overview } from "./screens/property/Overview";
 import { Documents } from "./screens/property/Documents";
 import { Leases } from "./screens/property/Leases";
 import { Repairs } from "./screens/property/Repairs";
+import { Intake } from "./screens/Intake";
 import { Service } from "./screens/Service";
 import { SignIn } from "./screens/SignIn";
 
@@ -65,6 +66,7 @@ export function AppRoutes() {
           <Route path="leases" element={<Leases />} />
           <Route path="documents" element={<Documents />} />
         </Route>
+        <Route path="/intake" element={<Intake />} />
         <Route path="/service" element={<Service />} />
         <Route path="/" element={<Navigate to="/properties" replace />} />
       </Route>

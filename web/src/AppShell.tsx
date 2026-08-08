@@ -35,6 +35,9 @@ export function AppShell() {
           <NavLink to="/properties" className="shell__link">
             Properties
           </NavLink>
+          <NavLink to="/intake" className="shell__link">
+            Intake
+          </NavLink>
           <NavLink to="/service" className="shell__link">
             Service
           </NavLink>

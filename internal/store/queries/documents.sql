@@ -24,13 +24,18 @@ SELECT * FROM documents WHERE id = ? LIMIT 1;
 -- name: GetDocumentBySHA :one
 SELECT * FROM documents WHERE sha256 = ? LIMIT 1;
 
+-- source_message_id is null for a document the operator uploaded and set for
+-- one that arrived attached to an email. It is provenance, not a link: what the
+-- document evidences is document_links' business.
 -- name: CreateDocument :one
 INSERT INTO documents (
     property_id, kind, title, original_filename, mime, size_bytes,
-    sha256, storage_path, extracted_text, uploaded_by, created_at, updated_at
+    sha256, storage_path, extracted_text, uploaded_by, source_message_id,
+    created_at, updated_at
 ) VALUES (
     ?, ?, ?, ?, ?, ?,
-    ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?,
+    ?, ?
 )
 RETURNING *;
 

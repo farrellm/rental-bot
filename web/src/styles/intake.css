@@ -1,0 +1,331 @@
+/*
+ * The mail room.
+ *
+ * The head of the card answers one question — is mail still arriving — and the
+ * register below is the evidence. A register is kept by day: the date is a rule
+ * across the page and every line under it carries only its time, so the times
+ * form a column the eye runs down. Repeating the date on eleven consecutive
+ * lines would say nothing eleven times.
+ *
+ * Nothing here is drawn. The lease term rule is the one drawn thing in this
+ * application and it stays that way; a day rule is a hairline and a date sitting
+ * on it, which is what every other divider on a card already is.
+ */
+
+/* The head's left column has to be allowed to give way before the file number
+   in the corner does — an address is longer than "Record of intake". */
+.card__title {
+  min-width: 0;
+}
+
+.card__title .card__origin {
+  overflow-wrap: anywhere;
+}
+
+/* A notice that reports an outcome rather than a fault: the same band, without
+   the fault colour, because "Gmail is connected" is good news. */
+.card__notice--quiet {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+  background: var(--ink-wash);
+  color: var(--graphite);
+}
+
+.intake__dismiss {
+  margin-left: auto;
+}
+
+/* An empty state is an invitation, so it is set as a sentence rather than as a
+   value in the mono column. */
+.intake__empty {
+  padding: var(--gap-tight) 0;
+  font-size: var(--size-body);
+  color: var(--muted-ink);
+}
+
+.intake__missing {
+  margin: 0 0 var(--gap-tight);
+  padding-left: var(--gap);
+  font-size: var(--size-small);
+  color: var(--graphite);
+  overflow-wrap: anywhere;
+}
+
+/* The foot carries the tally and the actions in one column, with the stamp as
+   its flex sibling — the same arrangement the service record uses for its
+   migration ledger, so the stamp can never land on top of either however
+   narrow the card gets. */
+.intake__foot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--gap-tight);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* A running total, in the register's own nouns. */
+.intake__tally {
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+}
+
+.intake__separator {
+  color: var(--card-rule);
+}
+
+/* The actions and the stamp are flex siblings in the foot, like every other
+   card. The failure line sits above them rather than beside, because an error
+   that has to share a row with three buttons is an error nobody reads. */
+.intake__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--gap-hair);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.intake__failure {
+  font-size: var(--size-small);
+  color: var(--oxide);
+  overflow-wrap: anywhere;
+}
+
+/* The register ------------------------------------------------------------ */
+
+.register {
+  padding: var(--gap) var(--gap-band) 0;
+  border-top: var(--rule);
+}
+
+.register__eyebrow {
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+.register__day + .register__day {
+  margin-top: var(--gap-tight);
+}
+
+/* The day rule: a hairline with the date sitting on it, in the margin.
+   The rule is drawn with a gradient on the pseudo-element rather than a border
+   on the paragraph, so the date does not sit in a gap punched through it. */
+.register__rule {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-tight);
+  margin-top: var(--gap);
+}
+
+.register__rule::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--card-rule);
+}
+
+.register__date {
+  flex: 0 0 auto;
+  font-size: var(--size-micro);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--muted-ink);
+}
+
+/* One entry --------------------------------------------------------------- */
+
+.entry-line + .entry-line {
+  border-top: 1px dashed var(--card-rule);
+}
+
+/* The line is a control, so it answers to the tap-target floor — but it is a
+   line on a card, not a button, so it carries no fill and no rule of its own.
+   Same geometry as a repair docket, because they are the same kind of thing. */
+.entry-line__line {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+  width: 100%;
+
+  min-height: var(--control-min);
+  padding: var(--gap-hair) 0;
+
+  font-family: var(--face-display);
+  font-size: var(--size-body);
+  text-align: left;
+  color: var(--graphite);
+
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.entry-line__line:hover {
+  background: var(--ink-wash);
+}
+
+.entry-line__time {
+  flex: 0 0 auto;
+  font-size: var(--size-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-ink);
+}
+
+/* The sender and its subject take the slack and give way first: the time, the
+   enclosure count, and the stamp all have a width they cannot go below. The
+   min-width is load-bearing — without it a long address sets the flex item's
+   automatic minimum to its own width and pushes the stamp off the card. */
+.entry-line__who {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.entry-line__from {
+  overflow-wrap: anywhere;
+}
+
+.entry-line__subject {
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+}
+
+/* "encl." is what a register calls what came in the envelope. */
+.entry-line__encl {
+  flex: 0 0 auto;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  white-space: nowrap;
+}
+
+/* The opened entry -------------------------------------------------------- */
+
+/* The opened body is set tight. It is what is under a line rather than a panel
+   that landed on it, and a body with a card's worth of air inside reads as the
+   latter. */
+.entry-line__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-hair);
+  padding: 0 0 var(--gap-tight) 0;
+}
+
+.entry-line__fault {
+  font-size: var(--size-small);
+  color: var(--oxide);
+  overflow-wrap: anywhere;
+}
+
+.entry-line__snippet {
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+}
+
+/* The facts are already ruled rows; the list they sit in does not need its own
+   margin on top of that. */
+.entry-line__facts .field {
+  padding: 0.35rem 0;
+}
+
+/* The original is a word in the margin, like every other action on a line in
+   this application. A bordered button inside a list entry is the column of
+   buttons the whole design avoids. */
+.entry-line__original {
+  align-self: flex-start;
+  min-height: var(--control-min);
+  padding: 0;
+  border: none;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+.entry-line__original:hover {
+  color: var(--graphite);
+  background: none;
+  text-decoration: underline;
+}
+
+/* Enclosures -------------------------------------------------------------- */
+
+.enclosures {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.enclosure {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+  padding: 0.25rem 0;
+  font-size: var(--size-small);
+}
+
+.enclosure__name {
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.enclosure__size {
+  flex: 0 0 auto;
+  font-size: var(--size-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-ink);
+}
+
+/* An attachment that was not stored says why, in place of the link that would
+   have opened it. The reason is the whole point of the row. */
+.enclosure__skipped {
+  flex: 0 0 auto;
+  font-size: var(--size-micro);
+  color: var(--amber);
+}
+
+/* A quiet word is invisible until hover, which is wrong on a row whose only
+   action it is — so the enclosure's link stays legible and only gains its
+   wash on hover. */
+.enclosure__open {
+  flex: 0 0 auto;
+  opacity: 1;
+  color: var(--verdigris);
+}
+
+.enclosure:hover .enclosure__open {
+  background: var(--verdigris-wash);
+}
+
+/* Narrow ------------------------------------------------------------------ */
+
+@media (max-width: 40rem) {
+  .register {
+    padding-left: var(--gap-tight);
+    padding-right: var(--gap-tight);
+  }
+
+  /* The stamp goes under the line rather than beside it, the way it does on
+     every other card in this application when there is no room across. */
+  .entry-line__line {
+    align-items: flex-start;
+  }
+
+  .entry-line__line .stamp {
+    align-self: flex-start;
+    transform: rotate(-3deg);
+  }
+
+  /* The time keeps its own row above the sender, so a 320px screen gives the
+     subject the full width instead of four characters of it. */
+  .entry-line__who {
+    flex-basis: 100%;
+  }
+}

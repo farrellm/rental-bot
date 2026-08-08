@@ -1,6 +1,6 @@
 # rental-bot — Design Document
 
-Status: draft · Last updated: 2026-08-04
+Status: draft · Last updated: 2026-08-08 · Implemented through M3
 
 ---
 
@@ -158,17 +158,30 @@ email_messages ──── email_attachments ──► documents
 **Ingestion**
 
 - `email_messages` — `gmail_message_id` **UNIQUE** (the idempotency key for the entire pipeline), `thread_id`, `from_addr`, `to_addr`, `subject`, `received_at`, `snippet`, `raw_path`, `status` (`received|parsing|needs_review|applied|rejected|ignored|failed`), `error`.
-- `email_attachments` — `email_message_id`, `filename`, `mime`, `size_bytes`, `document_id`.
+- `email_attachments` — `email_message_id`, `part_id`, `filename`, `mime`, `size_bytes`, `document_id`, `skipped_reason`. `part_id` is the attachment's position in the MIME tree, which is what makes a re-sync write nothing twice when two attachments share a filename. An attachment past the size cap gets a row with a `skipped_reason` and no `document_id`: "there was a 40 MB PDF and we did not take it" is a fact worth keeping.
 - `ingest_proposals` — the LLM's structured output *before* a human accepts it: `email_message_id`, `kind`, `payload` (JSON), `llm_model`, `prompt_tokens`, `completion_tokens`, `confidence`, `property_id` (resolved, nullable), `status` (`pending|approved|rejected|auto_applied`), `reviewed_by`, `reviewed_at`, `applied_entity_type`, `applied_entity_id`.
 
 **Alerting and operations**
 
+- `gmail_account` — the connected mailbox, one row: `address`,
+  `refresh_token_enc` (encrypted), `scopes`, `connected_at`, `history_id` (the
+  Gmail cursor), `watch_expires_at`, `last_sync_at`, `last_sync_count`,
+  `last_error`, `status` (`connected|degraded|revoked`).
+
+  The cursor and the last sync timestamp were originally assigned to `kv`
+  below. They live here instead: a cursor belongs with the account whose cursor
+  it is, typed columns with a `CHECK` read better in a shell than six
+  stringly-typed `kv` rows, and disconnecting becomes one `DELETE` rather than a
+  list of keys somebody has to remember. `telegram_state` has the same shape for
+  the same reason.
 - `alerts` — derived rows, recomputed by the scheduler: `kind` (`lease_expiring|policy_expiring|repair_stale|valuation_stale|proposal_pending`), `entity_type`, `entity_id`, `severity`, `due_on`, `resolved_at`.
 - `notifications` — outbound delivery log: `dedupe_key`, `channel`, `severity`, `title`, `first_seen_at`, `last_sent_at`, `send_count`, `resolved_at`. This table is what makes a flapping condition send once and then stay quiet.
 - `telegram_state` — single row: `chat_id` (authorized user), `last_update_id` (long-poll cursor), `muted_until`, `paired_at`.
 - `audit_log` — `user_id`, `actor` (`web|telegram|system`), `at`, `action`, `entity_type`, `entity_id`, `before` (JSON), `after` (JSON).
 - `jobs` — `kind`, `payload`, `run_after`, `attempts`, `max_attempts`, `locked_at`, `locked_by`, `last_error`, `status`.
-- `kv` — small singleton state: last Gmail `historyId`, last sync timestamp, schema metadata.
+- `kv` — small singleton state that has no table of its own. The Gmail cursor
+  and last sync timestamp were meant to live here and are on `gmail_account`
+  instead; see above.
 
 ---
 

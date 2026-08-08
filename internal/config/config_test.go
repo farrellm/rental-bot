@@ -3,7 +3,9 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 )
 
 func TestLoadMissingFileUsesDefaults(t *testing.T) {
@@ -143,6 +145,115 @@ func TestSecretsAreNotReadFromFile(t *testing.T) {
 	}
 	if len(cfg.Secrets.Key) != 0 {
 		t.Errorf("Secrets.Key = %q, want empty: secrets must not come from the config file", cfg.Secrets.Key)
+	}
+}
+
+// A fresh clone has no Google project and has to run anyway.
+func TestGmailIsOffWhenUnconfigured(t *testing.T) {
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Gmail.Enabled() {
+		t.Error("Gmail.Enabled() is true with no client_id")
+	}
+}
+
+func TestGmailReadsFileAndEnv(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	write(t, path, `
+[gmail]
+client_id = "1234.apps.googleusercontent.com"
+topic = "projects/rental/topics/gmail"
+allowed_senders = ["me@example.com"]
+poll_interval = "15m"
+watch_renew_interval = "12h"
+
+[gmail.pubsub]
+audience = "https://rental.example.com/webhooks/gmail"
+service_account = "push@rental.iam.gserviceaccount.com"
+`)
+
+	t.Setenv(envPrefix+"GMAIL_CLIENT_SECRET", "shh")
+	t.Setenv(envPrefix+"SECRET_KEY", "an-encryption-key")
+	t.Setenv(envPrefix+"GMAIL_ALLOWED_SENDERS", " a@example.com , b@example.com ,")
+	t.Setenv(envPrefix+"GMAIL_POLL_INTERVAL", "5m")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if !cfg.Gmail.Enabled() {
+		t.Fatal("Gmail.Enabled() is false with a client_id set")
+	}
+	if got, want := cfg.Gmail.PollInterval.Duration, 5*time.Minute; got != want {
+		t.Errorf("PollInterval = %s, want %s (env wins over file)", got, want)
+	}
+	if got, want := cfg.Gmail.WatchRenewInterval.Duration, 12*time.Hour; got != want {
+		t.Errorf("WatchRenewInterval = %s, want %s (from the file)", got, want)
+	}
+	if got, want := cfg.Gmail.AllowedSenders, []string{"a@example.com", "b@example.com"}; !slices.Equal(got, want) {
+		t.Errorf("AllowedSenders = %q, want %q", got, want)
+	}
+	if got, want := cfg.Gmail.ProcessedLabel, Default().Gmail.ProcessedLabel; got != want {
+		t.Errorf("ProcessedLabel = %q, want the default %q", got, want)
+	}
+	if cfg.Secrets.GmailClientSecret != "shh" {
+		t.Errorf("GmailClientSecret = %q, want it from the environment", cfg.Secrets.GmailClientSecret)
+	}
+}
+
+// Half-configured ingestion has to fail at startup, not at the first forwarded
+// email days later.
+func TestGmailRejectsHalfAConfiguration(t *testing.T) {
+	const clientID = "1234.apps.googleusercontent.com"
+
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{"no client secret", map[string]string{
+			"GMAIL_CLIENT_ID": clientID, "GMAIL_TOPIC": "projects/p/topics/t",
+			"GMAIL_ALLOWED_SENDERS": "me@example.com", "SECRET_KEY": "k",
+		}},
+		{"no topic", map[string]string{
+			"GMAIL_CLIENT_ID": clientID, "GMAIL_CLIENT_SECRET": "s",
+			"GMAIL_ALLOWED_SENDERS": "me@example.com", "SECRET_KEY": "k",
+		}},
+		{"no allowed senders", map[string]string{
+			"GMAIL_CLIENT_ID": clientID, "GMAIL_CLIENT_SECRET": "s",
+			"GMAIL_TOPIC": "projects/p/topics/t", "SECRET_KEY": "k",
+		}},
+		{"no encryption key for the refresh token", map[string]string{
+			"GMAIL_CLIENT_ID": clientID, "GMAIL_CLIENT_SECRET": "s",
+			"GMAIL_TOPIC": "projects/p/topics/t", "GMAIL_ALLOWED_SENDERS": "me@example.com",
+		}},
+		{"watch renewal past Google's 7-day expiry", map[string]string{
+			"GMAIL_CLIENT_ID": clientID, "GMAIL_CLIENT_SECRET": "s",
+			"GMAIL_TOPIC": "projects/p/topics/t", "GMAIL_ALLOWED_SENDERS": "me@example.com",
+			"SECRET_KEY": "k", "GMAIL_WATCH_RENEW_INTERVAL": "168h",
+		}},
+		{"unparseable duration", map[string]string{
+			"GMAIL_CLIENT_ID": clientID, "GMAIL_CLIENT_SECRET": "s",
+			"GMAIL_TOPIC": "projects/p/topics/t", "GMAIL_ALLOWED_SENDERS": "me@example.com",
+			"SECRET_KEY": "k", "GMAIL_POLL_INTERVAL": "ten minutes",
+		}},
+		{"lease shorter than the poll interval", map[string]string{
+			"JOBS_POLL_INTERVAL": "1m", "JOBS_LEASE_TIMEOUT": "5s",
+		}},
+		{"no workers", map[string]string{"JOBS_WORKERS": "0"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range tt.env {
+				t.Setenv(envPrefix+k, v)
+			}
+			if _, err := Load(""); err == nil {
+				t.Fatal("Load succeeded, want an error")
+			}
+		})
 	}
 }
 
