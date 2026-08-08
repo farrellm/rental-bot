@@ -404,3 +404,87 @@ export interface Vendor {
 export interface VendorList {
   items: Vendor[];
 }
+
+/* Intake ------------------------------------------------------------------- */
+
+/**
+ * What the mailbox is doing, as one word.
+ *
+ * `not-configured` and `not-connected` are different claims and both are
+ * working states: nobody asked for ingestion, versus somebody did and has not
+ * finished. Collapsing them shows a fresh clone a broken mailbox.
+ */
+export type IntakeState =
+  | "watching"
+  | "lapsed"
+  | "degraded"
+  | "revoked"
+  | "not-connected"
+  | "not-configured";
+
+export interface IntakeStanding {
+  configured: boolean;
+  connected: boolean;
+  state: IntakeState;
+  address?: string;
+  /** Where the operator forwards mail: the connected account's own address. */
+  forward_to?: string;
+  connected_at?: string;
+  history_id?: string;
+  watch_expires_at?: string;
+  last_sync_at?: string;
+  last_sync_count: number;
+  last_error?: string;
+  allowed_senders: string[];
+  poll_interval_seconds: number;
+  /** The configuration keys that are not set, when ingestion is off. */
+  missing?: string[];
+  counts: Record<string, number>;
+  queue_depth: Record<string, number>;
+  checked_at: string;
+}
+
+/** Every disposition the database's CHECK allows. M3 writes three of them. */
+export type EmailStatus =
+  | "received"
+  | "parsing"
+  | "needs_review"
+  | "applied"
+  | "rejected"
+  | "ignored"
+  | "failed";
+
+export interface EmailAttachment {
+  id: number;
+  filename: string;
+  mime: string;
+  size_bytes: number;
+  /** Null when the bytes were not stored; skipped_reason says why. */
+  document_id: number | null;
+  skipped_reason?: string;
+}
+
+export interface EmailMessage {
+  id: number;
+  gmail_message_id: string;
+  thread_id: string;
+  from_addr: string;
+  to_addr: string;
+  subject: string;
+  received_at: string;
+  snippet: string;
+  status: EmailStatus;
+  error?: string;
+  /** False for a message that was never downloaded, so there is no original. */
+  has_raw: boolean;
+  attachments: EmailAttachment[];
+}
+
+export interface EmailMessagePage {
+  items: EmailMessage[];
+  next_cursor?: string;
+}
+
+export interface ConnectResponse {
+  authorize_url: string;
+}

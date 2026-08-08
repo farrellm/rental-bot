@@ -119,3 +119,88 @@ function datePart(at: Date): string {
 function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
+
+/**
+ * Renders a byte count as "1.2 MB".
+ *
+ * Decimal units, because that is what a mail client and an operating system
+ * both report, and a document that Finder calls 2.4 MB should not read as
+ * 2.3 MB here.
+ */
+export function bytes(count: number | null | undefined): string {
+  if (count === null || count === undefined || !Number.isFinite(count)) return EM_DASH;
+  if (count < 1_000) return `${Math.trunc(count)} B`;
+
+  const units = ["kB", "MB", "GB"];
+  let value = count / 1_000;
+  let unit = 0;
+  while (value >= 1_000 && unit < units.length - 1) {
+    value /= 1_000;
+    unit += 1;
+  }
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
+
+/**
+ * Renders how long ago something happened: "4 minutes ago", "just now".
+ *
+ * The register's head answers "is mail still arriving", and a reader answers
+ * that from an interval rather than from a timestamp they have to subtract.
+ * The exact time is still on the line beside it.
+ */
+export function ago(iso: string | undefined, now = Date.now()): string {
+  if (!iso) return EM_DASH;
+  const at = new Date(iso).getTime();
+  if (Number.isNaN(at)) return EM_DASH;
+
+  const seconds = Math.round((now - at) / 1_000);
+  if (seconds < 0) return "just now";
+  if (seconds < 45) return "just now";
+
+  const steps: [number, string, string][] = [
+    [60, "minute", "minutes"],
+    [24, "hour", "hours"],
+    [Infinity, "day", "days"],
+  ];
+  let value = seconds / 60;
+  for (const [limit, one, many] of steps) {
+    if (value < limit) {
+      const whole = Math.round(value);
+      return `${whole} ${whole === 1 ? one : many} ago`;
+    }
+    value /= limit;
+  }
+  return timestamp(iso);
+}
+
+/**
+ * The day a register entry belongs to: "Wed 6 Aug", in the reader's timezone.
+ *
+ * A received-at is a real instant with a real timezone, unlike the calendar
+ * dates that come off documents — so unlike `calendarDate`, this one converts.
+ */
+export function dayRule(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return EM_DASH;
+
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  return `${days[at.getDay()]} ${at.getDate()} ${months[at.getMonth()]}`;
+}
+
+/** The key two timestamps share when they fall on the same local day. */
+export function dayKey(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+}
+
+/** Just the hour and minute: "14:02". */
+export function hourMinute(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return EM_DASH;
+  return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}

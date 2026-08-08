@@ -27,7 +27,26 @@ export type StampState =
   // purpose -- a let unit and a held property are the same idea.
   | "pending"
   | "ended"
-  | "terminated";
+  | "terminated"
+  // Intake: the mailbox itself. Not connected and not configured are different
+  // claims -- nobody asked for ingestion, versus somebody did and did not
+  // finish -- and a screen that says the wrong one sends the operator looking
+  // for a fault that is not there.
+  | "watching"
+  | "lapsed"
+  | "revoked"
+  | "not-connected"
+  | "not-configured"
+  // Intake: where one message stands. All seven of the database's dispositions
+  // have a word, including the four M4 writes, so the register can never show
+  // a state it has no word for.
+  | "received"
+  | "parsing"
+  | "needs-review"
+  | "applied"
+  | "rejected"
+  | "ignored"
+  | "failed";
 
 const WORD: Record<StampState, string> = {
   operational: "Operational",
@@ -46,6 +65,18 @@ const WORD: Record<StampState, string> = {
   pending: "Pending",
   ended: "Ended",
   terminated: "Terminated",
+  watching: "Watching",
+  lapsed: "Lapsed",
+  revoked: "Revoked",
+  "not-connected": "Not connected",
+  "not-configured": "Not set up",
+  received: "Received",
+  parsing: "Parsing",
+  "needs-review": "Needs review",
+  applied: "Applied",
+  rejected: "Rejected",
+  ignored: "Ignored",
+  failed: "Failed",
 };
 
 interface Props {

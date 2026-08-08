@@ -293,6 +293,49 @@
   color: var(--oxide);
 }
 
+/* Intake, the mailbox. Watching is the working state; a lapsed watch is amber
+   because ingestion is slower rather than stopped -- the poller carries it on
+   its own. Revoked is the one condition here that no amount of waiting fixes.
+   Never set up is quiet, because nobody asked for it. */
+.stamp--watching {
+  color: var(--verdigris);
+}
+
+.stamp--lapsed {
+  color: var(--amber);
+}
+
+.stamp--revoked,
+.stamp--not-connected {
+  color: var(--oxide);
+}
+
+.stamp--not-configured {
+  color: var(--muted-ink);
+}
+
+/* Intake, one message. Received and applied are done with; parsing and
+   needs-review are outstanding; failed is a fault. Ignored is history rather
+   than fault -- a sender off the allowlist is the allowlist working. */
+.stamp--received,
+.stamp--applied {
+  color: var(--verdigris);
+}
+
+.stamp--parsing,
+.stamp--needs-review {
+  color: var(--amber);
+}
+
+.stamp--failed {
+  color: var(--oxide);
+}
+
+.stamp--ignored,
+.stamp--rejected {
+  color: var(--muted-ink);
+}
+
 /* On an index card, where the stamp marks a record rather than heading one. */
 .stamp--small {
   padding: 0.3rem 0.7rem 0.28rem;

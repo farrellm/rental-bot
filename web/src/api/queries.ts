@@ -17,10 +17,13 @@ import {
 
 import { request } from "./client";
 import type {
+  ConnectResponse,
   Document,
   DocumentKind,
   DocumentLink,
   DocumentPage,
+  EmailMessagePage,
+  IntakeStanding,
   Lease,
   LeaseList,
   LeaseWrite,
@@ -65,6 +68,11 @@ export const keys = {
   // Portfolio-wide, because one plumber works on several houses.
   tenants: ["tenants"] as const,
   vendors: ["vendors"] as const,
+
+  // The mail room. Both are polled, because both change without the operator
+  // doing anything.
+  intake: ["intake"] as const,
+  emailMessages: ["intake", "messages"] as const,
 };
 
 /* Session ------------------------------------------------------------------ */
@@ -501,6 +509,69 @@ export function useCreateVendor() {
       request<Vendor>("/api/v1/vendors", { method: "POST", body }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.vendors });
+    },
+  });
+}
+
+/* Intake ------------------------------------------------------------------- */
+
+/**
+ * The mailbox's standing.
+ *
+ * Polled, like the service record, because everything it reports can change
+ * without the operator doing anything: a watch lapses, a grant is revoked, a
+ * sync lands. A stale answer here says mail is arriving when it is not.
+ */
+export function useIntakeStanding(): UseQueryResult<IntakeStanding, Error> {
+  return useQuery({
+    queryKey: keys.intake,
+    queryFn: ({ signal }) => request<IntakeStanding>("/api/v1/gmail", { signal }),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useEmailMessages(): UseQueryResult<EmailMessagePage, Error> {
+  return useQuery({
+    queryKey: keys.emailMessages,
+    queryFn: ({ signal }) =>
+      request<EmailMessagePage>("/api/v1/email-messages", { signal }),
+    refetchInterval: 15_000,
+  });
+}
+
+/** Starts the OAuth flow. The caller navigates to the URL this returns. */
+export function useConnectGmail(): UseMutationResult<ConnectResponse, Error, void> {
+  return useMutation({
+    mutationFn: () => request<ConnectResponse>("/api/v1/gmail/connect", { method: "POST" }),
+  });
+}
+
+export function useDisconnectGmail(): UseMutationResult<void, Error, void> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<void>("/api/v1/gmail", { method: "DELETE" }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.intake });
+    },
+  });
+}
+
+/**
+ * Queues a sync now.
+ *
+ * The register is invalidated after a beat rather than immediately: the request
+ * only queues the work, and refetching the instant it returns shows the same
+ * page back. This is the one place in the app that waits on purpose.
+ */
+export function useSyncNow(): UseMutationResult<{ queued: boolean }, Error, void> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<{ queued: boolean }>("/api/v1/gmail/sync", { method: "POST" }),
+    onSuccess: () => {
+      window.setTimeout(() => {
+        void client.invalidateQueries({ queryKey: keys.intake });
+        void client.invalidateQueries({ queryKey: keys.emailMessages });
+      }, 1_500);
     },
   });
 }
