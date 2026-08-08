@@ -127,23 +127,27 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 	// Ingestion is optional. A fresh clone has no Google project, and the whole
 	// subsystem stays unbuilt rather than being built and left to fail: no
 	// handlers, no scheduled polls, and a screen that says it is not configured.
-	if err := wireIngestion(cfg, repo, blobs, runner, ticker, logger); err != nil {
+	ingestion, err := wireIngestion(cfg, repo, blobs, runner, ticker, logger)
+	if err != nil {
 		return err
 	}
 
 	started := time.Now()
 	handler := httpapi.New(httpapi.Options{
-		Config:    cfg,
-		DB:        db,
-		Repo:      repo,
-		Blobs:     blobs,
-		Guard:     guard,
-		Queue:     queue,
-		Runner:    runner,
-		Limiter:   auth.NewLimiter(),
-		Logger:    logger,
-		SPA:       web.SPA(),
-		StartedAt: started,
+		Config:       cfg,
+		DB:           db,
+		Repo:         repo,
+		Blobs:        blobs,
+		Guard:        guard,
+		Queue:        queue,
+		Runner:       runner,
+		Gmail:        ingestion.tokens,
+		Archive:      ingestion.archive,
+		PushVerifier: ingestion.verifier,
+		Limiter:      auth.NewLimiter(),
+		Logger:       logger,
+		SPA:          web.SPA(),
+		StartedAt:    started,
 	})
 
 	srv := &http.Server{
@@ -218,6 +222,15 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 	return nil
 }
 
+// ingestion is what the HTTP layer needs from the Gmail subsystem. Every field
+// is nil when ingestion is not configured, and every route reads that as "not
+// configured" rather than as a failure.
+type ingestion struct {
+	tokens   *gmail.Store
+	archive  *gmail.Archive
+	verifier *gmail.Verifier
+}
+
 // wireIngestion builds the Gmail subsystem, or nothing at all.
 //
 // A blank gmail.client_id builds none of it. That is a working state and the
@@ -230,27 +243,35 @@ func wireIngestion(
 	runner *jobs.Runner,
 	ticker *scheduler.Scheduler,
 	logger *slog.Logger,
-) error {
+) (ingestion, error) {
 	if !cfg.Gmail.Enabled() {
 		logger.Info("email ingestion is not configured; set gmail.client_id to enable it")
-		return nil
+		return ingestion{}, nil
 	}
 
 	// config.Validate has already refused an ingestion setup without a key, so
 	// this failing means the key itself is unusable.
 	box, err := secret.New(cfg.Secrets.Key)
 	if err != nil {
-		return fmt.Errorf("email ingestion needs the encryption key: %w", err)
+		return ingestion{}, fmt.Errorf("email ingestion needs the encryption key: %w", err)
 	}
 	archive, err := gmail.NewArchive(cfg.Storage.RawEmail)
 	if err != nil {
-		return err
+		return ingestion{}, err
 	}
 
 	tokens := gmail.NewStore(repo, box, cfg, strings.TrimSuffix(cfg.Server.BaseURL, "/")+gmail.CallbackPath)
 	syncer := gmail.NewSyncer(tokens, repo, blobs, archive, cfg.Gmail, logger)
 	watcher := gmail.NewWatcher(tokens, cfg.Gmail.Topic)
 	gmail.Register(runner, syncer, watcher, logger)
+
+	// The verifier is built even when the Pub/Sub half is unconfigured. It
+	// refuses everything in that state, which is what the webhook should do
+	// when there is nothing to check a push against.
+	verifier := gmail.NewVerifier(cfg.Gmail.PubSub.Audience, cfg.Gmail.PubSub.ServiceAccount)
+	if !verifier.Configured() {
+		logger.Warn("the Gmail push endpoint will refuse every request; set gmail.pubsub.audience and gmail.pubsub.service_account")
+	}
 
 	// The poller, not the webhook, is what makes ingestion reliable (§4.2).
 	// Pub/Sub is at-least-once and occasionally lossy, and a watch can lapse
@@ -272,8 +293,9 @@ func wireIngestion(
 	logger.Info("email ingestion is configured",
 		"poll_interval", cfg.Gmail.PollInterval.Duration,
 		"senders", len(cfg.Gmail.AllowedSenders),
+		"push", verifier.Configured(),
 	)
-	return nil
+	return ingestion{tokens: tokens, archive: archive, verifier: verifier}, nil
 }
 
 // ensureDirs creates the storage directories so a write in a later milestone

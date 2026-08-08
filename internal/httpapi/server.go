@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/farrellm/rental-bot/internal/auth"
 	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
+	"github.com/farrellm/rental-bot/internal/gmail"
 	"github.com/farrellm/rental-bot/internal/jobs"
 	"github.com/farrellm/rental-bot/internal/store"
 )
@@ -47,6 +49,16 @@ type Options struct {
 	// Runner is notified after an enqueue so the work starts now rather than
 	// at the pool's next poll. It may be nil.
 	Runner *jobs.Runner
+	// Gmail owns the connected mailbox. A nil Gmail means ingestion is not
+	// configured, which is a working state: the routes answer 503 and the
+	// intake screen says which configuration keys are missing.
+	Gmail *gmail.Store
+	// Archive holds the raw .eml files. Nil alongside a nil Gmail.
+	Archive *gmail.Archive
+	// PushVerifier checks the OIDC token on a Pub/Sub push. A nil one refuses
+	// every push -- failing open would put an unauthenticated enqueue endpoint
+	// on the public internet.
+	PushVerifier *gmail.Verifier
 	// Limiter throttles sign-in attempts. A nil Limiter gets a fresh one.
 	Limiter *auth.Limiter
 	Logger  *slog.Logger
@@ -71,6 +83,15 @@ type server struct {
 	log       *slog.Logger
 	spa       fs.FS
 	startedAt time.Time
+
+	gmail        *gmail.Store
+	archive      *gmail.Archive
+	pushVerifier *gmail.Verifier
+
+	// pushRefusals guards the counter behind the throttled log line for
+	// unauthenticated pushes.
+	pushRefusals     sync.Mutex
+	pushRefusalCount int
 }
 
 // New builds the HTTP handler for the whole application.
@@ -97,6 +118,10 @@ func New(opts Options) http.Handler {
 		log:       opts.Logger,
 		spa:       opts.SPA,
 		startedAt: opts.StartedAt,
+
+		gmail:        opts.Gmail,
+		archive:      opts.Archive,
+		pushVerifier: opts.PushVerifier,
 	}
 
 	mux := http.NewServeMux()
@@ -121,6 +146,7 @@ func New(opts Options) http.Handler {
 	s.routeRepairs(mux)
 	s.routeLeases(mux)
 	s.routeTenants(mux)
+	s.routeIntake(mux)
 
 	// Anything else under /api/ is a client mistake, and it gets a
 	// problem+json 404 rather than the SPA's index.html.
