@@ -14,6 +14,7 @@ import (
 	"github.com/farrellm/rental-bot/internal/auth"
 	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
+	"github.com/farrellm/rental-bot/internal/jobs"
 	"github.com/farrellm/rental-bot/internal/store"
 )
 
@@ -39,6 +40,13 @@ type Options struct {
 	// Guard authenticates requests. A nil Guard fails every guarded route
 	// closed with a 503 rather than leaving the API open.
 	Guard *auth.Guard
+	// Queue takes the work a request cannot do inside its own deadline: a
+	// Pub/Sub push enqueues a sync and answers immediately. A nil Queue fails
+	// those routes with a 503.
+	Queue *jobs.Queue
+	// Runner is notified after an enqueue so the work starts now rather than
+	// at the pool's next poll. It may be nil.
+	Runner *jobs.Runner
 	// Limiter throttles sign-in attempts. A nil Limiter gets a fresh one.
 	Limiter *auth.Limiter
 	Logger  *slog.Logger
@@ -57,6 +65,8 @@ type server struct {
 	repo      *store.Repo
 	blobs     *blob.Store
 	guard     *auth.Guard
+	queue     *jobs.Queue
+	runner    *jobs.Runner
 	limiter   *auth.Limiter
 	log       *slog.Logger
 	spa       fs.FS
@@ -81,6 +91,8 @@ func New(opts Options) http.Handler {
 		repo:      opts.Repo,
 		blobs:     opts.Blobs,
 		guard:     opts.Guard,
+		queue:     opts.Queue,
+		runner:    opts.Runner,
 		limiter:   opts.Limiter,
 		log:       opts.Logger,
 		spa:       opts.SPA,

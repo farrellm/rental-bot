@@ -19,6 +19,8 @@ import (
 	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
 	"github.com/farrellm/rental-bot/internal/httpapi"
+	"github.com/farrellm/rental-bot/internal/jobs"
+	"github.com/farrellm/rental-bot/internal/scheduler"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/version"
 	"github.com/farrellm/rental-bot/migrations"
@@ -106,6 +108,20 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 	secure := strings.HasPrefix(cfg.Server.BaseURL, "https://")
 	guard := auth.NewGuard(auth.NewSessions(repo), auth.NewCSRF(cfg.Secrets.Key), secure, httpapi.WriteProblem)
 
+	// The queue and the pool that drains it. Everything the webhook and the
+	// scheduler want done goes through here rather than running inline, so a
+	// Pub/Sub push is answered in milliseconds and a Gmail history walk
+	// happens on a worker with retries behind it.
+	queue := jobs.NewQueue(repo)
+	runner := jobs.NewRunner(queue, jobs.RunnerOptions{
+		Workers:      cfg.Jobs.Workers,
+		PollInterval: cfg.Jobs.PollInterval.Duration,
+		LeaseTimeout: cfg.Jobs.LeaseTimeout.Duration,
+		Logger:       logger,
+	})
+
+	ticker := scheduler.New(queue, runner.Notify, logger)
+
 	started := time.Now()
 	handler := httpapi.New(httpapi.Options{
 		Config:    cfg,
@@ -113,6 +129,8 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 		Repo:      repo,
 		Blobs:     blobs,
 		Guard:     guard,
+		Queue:     queue,
+		Runner:    runner,
 		Limiter:   auth.NewLimiter(),
 		Logger:    logger,
 		SPA:       web.SPA(),
@@ -139,7 +157,19 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 		"database", cfg.Database.Path,
 		"schema_version", schemaVersion,
 		"spa_embedded", web.Embedded,
+		"workers", cfg.Jobs.Workers,
+		"gmail", cfg.Gmail.Enabled(),
 	)
+
+	// Background work starts before the listener: a job that was mid-run when
+	// the last process stopped should be reclaimed and retried whether or not
+	// anyone is calling the API.
+	//
+	// The context here is the signal context, so a Ctrl-C stops the workers at
+	// the same instant it stops accepting requests, and Stop below is what
+	// waits for the work in flight.
+	runner.Start(ctx)
+	ticker.Start(ctx)
 
 	errc := make(chan error, 1)
 	go func() {
@@ -162,6 +192,17 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("shutdown: %w", err)
+	}
+
+	// The workers were already told to stop by the cancelled signal context;
+	// this waits for what is in flight. A job that does not finish in time
+	// stays locked, and the next process's reclaim sweep returns it to pending
+	// -- the same path a kill -9 takes.
+	if err := ticker.Stop(shutdownCtx); err != nil {
+		logger.Warn("scheduler did not stop cleanly", "error", err)
+	}
+	if err := runner.Stop(shutdownCtx); err != nil {
+		logger.Warn("job workers did not stop cleanly", "error", err)
 	}
 
 	logger.Info("stopped", "uptime", time.Since(started).Round(time.Second).String())
