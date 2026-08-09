@@ -163,6 +163,7 @@ func New(opts Options) http.Handler {
 	s.routeLeases(mux)
 	s.routeTenants(mux)
 	s.routeIntake(mux)
+	s.routeTelegram(mux)
 
 	// Anything else under /api/ is a client mistake, and it gets a
 	// problem+json 404 rather than the SPA's index.html.
