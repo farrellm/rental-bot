@@ -14,19 +14,26 @@ plan.
 
 ## Status
 
-**M3** — Gmail watch, webhook, fallback poller, raw archive. Connect a mailbox
-and forwarded mail files itself: the message is archived as a raw `.eml`,
-recorded in the register, and its attachments land in the document store. The
-Intake screen says whether mail is still arriving.
+**M3.5** — the alert bus and the Telegram channel, outbound only. The
+application now tells you when it has stopped working: a revoked grant, a
+lapsed watch, a job that gave up, a queue that stopped draining, a handler that
+panicked. A condition is said once and then goes quiet until it clears, and the
+Intake screen keeps the register of what went out.
 
-Everything before it still holds. You can sign in, put properties on file with
-their units, file documents against them, keep a cash-flow ledger, run repairs
-with a dated history, and record leases and tenants; occupancy is derived from
-the lease dates rather than stored.
+**M3** before it — Gmail watch, webhook, fallback poller, raw archive. Connect
+a mailbox and forwarded mail files itself: the message is archived as a raw
+`.eml`, recorded in the register, and its attachments land in the document
+store. The Intake screen says whether mail is still arriving.
 
-M3 stops at the door of the LLM. Nothing is classified, extracted, or proposed
-— that gate is M4's, and forwarded email is untrusted input that should reach a
-model with no capability to act on it.
+Everything before that still holds. You can sign in, put properties on file
+with their units, file documents against them, keep a cash-flow ledger, run
+repairs with a dated history, and record leases and tenants; occupancy is
+derived from the lease dates rather than stored.
+
+This stops at the door of the LLM. Nothing is classified, extracted, or
+proposed — that gate is M4's, and forwarded email is untrusted input that
+should reach a model with no capability to act on it. The chat is one-way for
+now: it can pair, and after that it only sends. Commands are M6's.
 
 ## Requirements
 
