@@ -13,4 +13,7 @@
 
 # Secrets — never committed; see config.example.toml
 secret.key
+# direnv: carries RENTAL_BOT_SECRET_KEY into the shell
+.envrc
+
 .playwright-mcp/
