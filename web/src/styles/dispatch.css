@@ -1,0 +1,208 @@
+/*
+ * The dispatch book.
+ *
+ * The mail room's card is a receiving register: what arrived, kept by day. This
+ * is its counterpart — what went out. And a dispatch book has a habit of its
+ * own that this data model already has: a notice is entered once, and when the
+ * same condition has to go out again the clerk re-strikes the line and marks a
+ * tally in the margin rather than writing a second entry. When the matter
+ * clears, the line is ruled off.
+ *
+ * That tally is the one thing on this card worth remembering, and it is the
+ * only thing here that is not already in card.css or intake.css. Everything
+ * else — the day rules, the ruled rows, the stock, the stamp — is the record
+ * card, unchanged.
+ *
+ * Severity is not a stamp. The stamp means "the state of this thing" on every
+ * other screen in this application, and a notice's severity is a property of
+ * it rather than a state it is in. It reads as a stamped word in the margin, in
+ * the severity's own ink: the priority marking a clerk writes beside an entry.
+ */
+
+.dispatch__empty {
+  padding: var(--gap-tight) 0;
+  font-size: var(--size-body);
+  color: var(--muted-ink);
+}
+
+/* The pairing instruction ------------------------------------------------- */
+
+/* The code is the only thing on this card the operator has to copy by hand, so
+   it is set at the reading size rather than the label size and given room to
+   be read off a screen and typed into a phone. */
+.dispatch__code {
+  font-size: var(--size-lead);
+  letter-spacing: 0.12em;
+}
+
+/* The line to send, quoted the way it has to be typed. Not an input: nothing
+   here is being entered, and a box would say otherwise. */
+.dispatch__send {
+  display: inline-block;
+  padding: 0.15rem 0.4rem;
+  background: var(--ink-wash);
+  overflow-wrap: anywhere;
+}
+
+/* How to undo something the screen deliberately will not do. */
+.dispatch__note {
+  margin-top: var(--gap-tight);
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+}
+
+/* The foot ---------------------------------------------------------------- */
+
+/* Same arrangement as the intake card's: the tally and the actions in a column
+   with the stamp as their flex sibling, so the stamp can never land on top of
+   either however narrow the card gets. */
+.dispatch__foot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--gap-tight);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dispatch__tally {
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+}
+
+.dispatch__failure {
+  font-size: var(--size-small);
+  color: var(--oxide);
+  overflow-wrap: anywhere;
+}
+
+/* One notice -------------------------------------------------------------- */
+
+.notice-line + .notice-line {
+  border-top: 1px dashed var(--card-rule);
+}
+
+.notice-line__line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+
+  min-height: var(--control-min);
+  padding: var(--gap-hair) 0;
+  font-size: var(--size-body);
+  color: var(--graphite);
+}
+
+.notice-line__time {
+  flex: 0 0 auto;
+  font-size: var(--size-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-ink);
+}
+
+/* The margin marking. A fixed width so the titles line up into a column the
+   eye runs down, which is the whole reason a register is kept in columns. */
+.notice-line__mark {
+  flex: 0 0 5.5rem;
+  font-size: var(--size-micro);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+}
+
+.notice-line__mark--info {
+  color: var(--muted-ink);
+}
+
+.notice-line__mark--warning {
+  color: var(--amber);
+}
+
+.notice-line__mark--critical {
+  color: var(--oxide);
+}
+
+/* The title gives way before the time, the mark, or the tally do. min-width is
+   load-bearing: without it a long unbroken title sets the flex item's automatic
+   minimum to its own width and pushes the tally off the card. */
+.notice-line__what {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.notice-line__title {
+  overflow-wrap: anywhere;
+}
+
+.notice-line__detail {
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+}
+
+/* The tally --------------------------------------------------------------- */
+
+/* The restrike mark: this condition was entered once and struck this many
+   times. It is the reason there is one line here and not four, and it is the
+   one mark on this card that carries information nothing else does. */
+.notice-line__tally {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--size-small);
+  color: var(--amber);
+  white-space: nowrap;
+}
+
+/* A cleared condition ------------------------------------------------------ */
+
+/* Ruled off, the way a clerk closes a matter: the entry stays legible and
+   stops being outstanding. The rule is typography rather than a drawn line —
+   the lease term rule remains the one drawn thing in this application. */
+.notice-line--cleared .notice-line__title {
+  color: var(--muted-ink);
+  /* currentcolor, not --card-rule: a rule the same weight as the card's own
+     hairlines disappears against the text it is meant to cross out, and this
+     mark is the whole difference between an open matter and a closed one. */
+  text-decoration: line-through currentcolor;
+}
+
+.notice-line--cleared .notice-line__mark {
+  color: var(--muted-ink);
+}
+
+.notice-line--cleared .notice-line__tally {
+  color: var(--muted-ink);
+}
+
+.notice-line__cleared {
+  flex: 0 0 auto;
+  font-size: var(--size-micro);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--verdigris);
+  white-space: nowrap;
+}
+
+/* Narrow ------------------------------------------------------------------ */
+
+@media (max-width: 40rem) {
+  /* The margin column becomes a margin *row*: at this width a 5.5rem column
+     leaves the title four characters. Everything that was marginalia -- the
+     time, the severity, the tally, the clearing -- shares one line, and the
+     entry itself wraps underneath. Ordering the entry last rather than
+     reordering four other rules is what keeps the tally beside the mark it
+     belongs with instead of stranded under a paragraph. */
+  .notice-line__mark {
+    flex: 0 0 auto;
+  }
+
+  .notice-line__what {
+    order: 1;
+    flex-basis: 100%;
+  }
+}

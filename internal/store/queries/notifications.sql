@@ -50,20 +50,6 @@ WHERE dedupe_key = sqlc.arg(dedupe_key)
   AND channel = sqlc.arg(channel)
   AND resolved_at IS NULL;
 
--- The register, newest first. Keyset pagination on first_seen_at with id
--- breaking the tie, the same shape every other list in this schema uses.
--- name: ListNotificationsFirstPage :many
-SELECT * FROM notifications
-ORDER BY first_seen_at DESC, id DESC
-LIMIT ?;
-
--- name: ListNotificationsAfter :many
-SELECT * FROM notifications
-WHERE (first_seen_at < sqlc.arg(after_first_seen_at))
-   OR (first_seen_at = sqlc.arg(after_first_seen_at) AND id < sqlc.arg(after_id))
-ORDER BY first_seen_at DESC, id DESC
-LIMIT sqlc.arg(page_size);
-
 -- The foot of the dispatch card: how much the register holds without counting
 -- the lines. COUNT rather than SUM over a CASE, because SUM of no rows is NULL
 -- and a tally of nothing is zero.
@@ -72,3 +58,34 @@ SELECT
     COUNT(*) AS total,
     COUNT(CASE WHEN resolved_at IS NULL THEN 1 END) AS outstanding
 FROM notifications;
+
+-- The register, newest first, for one channel.
+--
+-- Every subscribed channel gets its own row per condition, because each has its
+-- own cooldown and its own delivery. That is right for the record and wrong for
+-- a screen: with a bot configured the operator would read every condition
+-- twice, once for the channel it went out on and once for the log. So the
+-- register is always read one channel at a time.
+--
+-- Keyset pagination on first_seen_at with id breaking the tie, the same shape
+-- every other list in this schema uses.
+-- name: ListChannelNotificationsFirstPage :many
+SELECT * FROM notifications
+WHERE channel = ?
+ORDER BY first_seen_at DESC, id DESC
+LIMIT ?;
+
+-- name: ListChannelNotificationsAfter :many
+SELECT * FROM notifications
+WHERE channel = sqlc.arg(channel)
+  AND ((first_seen_at < sqlc.arg(after_first_seen_at))
+    OR (first_seen_at = sqlc.arg(after_first_seen_at) AND id < sqlc.arg(after_id)))
+ORDER BY first_seen_at DESC, id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: CountChannelNotifications :one
+SELECT
+    COUNT(*) AS total,
+    COUNT(CASE WHEN resolved_at IS NULL THEN 1 END) AS outstanding
+FROM notifications
+WHERE channel = ?;

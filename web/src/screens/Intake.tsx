@@ -13,6 +13,7 @@ import type { EmailMessage, EmailStatus, IntakeStanding } from "../api/types";
 import { FieldRow } from "../components/FieldRow";
 import { Stamp, type StampState } from "../components/Stamp";
 import { ago, bytes, clock, dayKey, dayRule, hourMinute, plural, timestamp } from "../format";
+import { Dispatch } from "./Dispatch";
 
 const DASH = "—";
 
@@ -37,6 +38,26 @@ const MESSAGE_STAMP: Record<EmailStatus, StampState> = {
 };
 
 /**
+ * Intake: what comes in, and what goes out.
+ *
+ * Two records on one desk. The mail room is what arrives — forwarded receipts,
+ * leases, statements — and the dispatch book below it is what this process
+ * sends back out when something needs attention. They are the same shape of
+ * thing kept in opposite directions, which is why they are one screen rather
+ * than two.
+ */
+export function Intake() {
+  return (
+    <main className="shell__main shell__main--single">
+      <div className="desk">
+        <Mailbox />
+        <Dispatch />
+      </div>
+    </main>
+  );
+}
+
+/**
  * The mail room.
  *
  * One question comes first and everything is arranged around it: is mail still
@@ -44,7 +65,7 @@ const MESSAGE_STAMP: Record<EmailStatus, StampState> = {
  * last delivery landed — and the register below is the evidence, kept by day
  * the way an inbound mail log is kept.
  */
-export function Intake() {
+function Mailbox() {
   const standing = useIntakeStanding();
   const messages = useEmailMessages();
   const [params, setParams] = useSearchParams();
@@ -54,45 +75,43 @@ export function Intake() {
   const outcome = params.get("gmail");
 
   return (
-    <main className="shell__main shell__main--single">
-      <section className="card" data-stale={Boolean(error && data)}>
-        <header className="card__head">
-          <div className="card__title">
-            <h1 className="card__mark stamped">Intake</h1>
-            <p className="card__origin mono">{data?.address ?? "no mailbox connected"}</p>
-          </div>
-          <div className="card__file">
-            <p className="card__eyebrow stamped">Record of intake</p>
-            <p className="card__read mono">{data ? `read ${clock(data.checked_at)}` : DASH}</p>
-          </div>
-        </header>
+    <section className="card" data-stale={Boolean(error && data)}>
+      <header className="card__head">
+        <div className="card__title">
+          <h1 className="card__mark stamped">Intake</h1>
+          <p className="card__origin mono">{data?.address ?? "no mailbox connected"}</p>
+        </div>
+        <div className="card__file">
+          <p className="card__eyebrow stamped">Record of intake</p>
+          <p className="card__read mono">{data ? `read ${clock(data.checked_at)}` : DASH}</p>
+        </div>
+      </header>
 
-        {error && <p className="card__notice">{error}</p>}
-        {outcome && (
-          <Outcome outcome={outcome} onDismiss={() => setParams({}, { replace: true })} />
+      {error && <p className="card__notice">{error}</p>}
+      {outcome && (
+        <Outcome outcome={outcome} onDismiss={() => setParams({}, { replace: true })} />
+      )}
+      {data?.last_error && !error && <p className="card__notice">{data.last_error}</p>}
+
+      {data && <Standing standing={data} />}
+
+      <Register
+        messages={messages.data?.items ?? []}
+        loading={messages.isPending}
+        error={messages.isError ? describeError(messages.error) : null}
+        standing={data}
+      />
+
+      <footer className="card__foot">
+        <div className="intake__foot">
+          <Tally counts={data?.counts ?? {}} />
+          <Actions standing={data} />
+        </div>
+        {!standing.isPending && data && (
+          <Stamp state={STATE_STAMP[data.state]} at={data.checked_at} />
         )}
-        {data?.last_error && !error && <p className="card__notice">{data.last_error}</p>}
-
-        {data && <Standing standing={data} />}
-
-        <Register
-          messages={messages.data?.items ?? []}
-          loading={messages.isPending}
-          error={messages.isError ? describeError(messages.error) : null}
-          standing={data}
-        />
-
-        <footer className="card__foot">
-          <div className="intake__foot">
-            <Tally counts={data?.counts ?? {}} />
-            <Actions standing={data} />
-          </div>
-          {!standing.isPending && data && (
-            <Stamp state={STATE_STAMP[data.state]} at={data.checked_at} />
-          )}
-        </footer>
-      </section>
-    </main>
+      </footer>
+    </section>
   );
 }
 

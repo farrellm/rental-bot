@@ -125,10 +125,9 @@ func (s *server) handleChannelStanding(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// The register's tally comes from notifications rather than from the
-	// channel, because the log sink writes there whether or not a bot exists:
-	// a host with no Telegram still has a dispatch register worth reading.
-	if tally, err := s.repo.Read().CountNotifications(ctx); err != nil {
+	// The tally counts the same channel the register lists, so the foot and
+	// the lines above it agree.
+	if tally, err := s.repo.Read().CountChannelNotifications(ctx, s.registerChannel()); err != nil {
 		loggerFrom(ctx).Error("count notifications", "error", err)
 	} else {
 		out.Sent = tally.Total
@@ -294,15 +293,37 @@ func (s *server) handleListNotifications(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, r, http.StatusOK, out)
 }
 
+// registerChannel is the one the dispatch register shows.
+//
+// Every subscribed channel gets its own notifications row per condition,
+// because each has its own cooldown and its own delivery. That is right for
+// the record and wrong for a screen: with a bot configured the operator would
+// otherwise read every condition twice, once for the channel it went out on
+// and once for the log. So the screen reads the channel that actually carries
+// the alerts, and falls back to the log when there is none — which is what
+// makes the register worth looking at before anybody has set a bot up.
+func (s *server) registerChannel() string {
+	if s.cfg.Telegram.Enabled() {
+		return "telegram"
+	}
+	return "log"
+}
+
 func (s *server) notificationPage(ctx context.Context, cursor string, limit int) ([]sqlc.Notification, error) {
+	channel := s.registerChannel()
+
 	if cursor == "" {
-		return s.repo.Read().ListNotificationsFirstPage(ctx, int64(limit))
+		return s.repo.Read().ListChannelNotificationsFirstPage(ctx, sqlc.ListChannelNotificationsFirstPageParams{
+			Channel: channel,
+			Limit:   int64(limit),
+		})
 	}
 	firstSeenAt, id, err := decodeCursor(cursor)
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.Read().ListNotificationsAfter(ctx, sqlc.ListNotificationsAfterParams{
+	return s.repo.Read().ListChannelNotificationsAfter(ctx, sqlc.ListChannelNotificationsAfterParams{
+		Channel:          channel,
 		AfterFirstSeenAt: firstSeenAt,
 		AfterID:          id,
 		PageSize:         int64(limit),

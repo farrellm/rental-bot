@@ -37,6 +37,13 @@ export type StampState =
   | "revoked"
   | "not-connected"
   | "not-configured"
+  // The alert channel. `not-connected` and `not-configured` are shared with
+  // the mailbox on purpose -- they are the same two claims about a different
+  // subsystem, and a reader who has learned them once should not have to learn
+  // a second pair of words for them. `no-contact` is shared with the service
+  // record for the same reason: something that should answer is not answering.
+  | "paired"
+  | "muted"
   // Intake: where one message stands. All seven of the database's dispositions
   // have a word, including the four M4 writes, so the register can never show
   // a state it has no word for.
@@ -70,6 +77,8 @@ const WORD: Record<StampState, string> = {
   revoked: "Revoked",
   "not-connected": "Not connected",
   "not-configured": "Not set up",
+  paired: "Paired",
+  muted: "Muted",
   received: "Received",
   parsing: "Parsing",
   "needs-review": "Needs review",

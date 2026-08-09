@@ -9,6 +9,26 @@ import (
 	"context"
 )
 
+const countChannelNotifications = `-- name: CountChannelNotifications :one
+SELECT
+    COUNT(*) AS total,
+    COUNT(CASE WHEN resolved_at IS NULL THEN 1 END) AS outstanding
+FROM notifications
+WHERE channel = ?
+`
+
+type CountChannelNotificationsRow struct {
+	Total       int64
+	Outstanding int64
+}
+
+func (q *Queries) CountChannelNotifications(ctx context.Context, channel string) (CountChannelNotificationsRow, error) {
+	row := q.db.QueryRowContext(ctx, countChannelNotifications, channel)
+	var i CountChannelNotificationsRow
+	err := row.Scan(&i.Total, &i.Outstanding)
+	return i, err
+}
+
 const countNotifications = `-- name: CountNotifications :one
 SELECT
     COUNT(*) AS total,
@@ -126,22 +146,29 @@ func (q *Queries) InsertNotification(ctx context.Context, arg InsertNotification
 	return i, err
 }
 
-const listNotificationsAfter = `-- name: ListNotificationsAfter :many
+const listChannelNotificationsAfter = `-- name: ListChannelNotificationsAfter :many
 SELECT id, dedupe_key, channel, severity, title, detail, first_seen_at, last_sent_at, send_count, resolved_at, created_at, updated_at FROM notifications
-WHERE (first_seen_at < ?1)
-   OR (first_seen_at = ?1 AND id < ?2)
+WHERE channel = ?1
+  AND ((first_seen_at < ?2)
+    OR (first_seen_at = ?2 AND id < ?3))
 ORDER BY first_seen_at DESC, id DESC
-LIMIT ?3
+LIMIT ?4
 `
 
-type ListNotificationsAfterParams struct {
+type ListChannelNotificationsAfterParams struct {
+	Channel          string
 	AfterFirstSeenAt string
 	AfterID          int64
 	PageSize         int64
 }
 
-func (q *Queries) ListNotificationsAfter(ctx context.Context, arg ListNotificationsAfterParams) ([]Notification, error) {
-	rows, err := q.db.QueryContext(ctx, listNotificationsAfter, arg.AfterFirstSeenAt, arg.AfterID, arg.PageSize)
+func (q *Queries) ListChannelNotificationsAfter(ctx context.Context, arg ListChannelNotificationsAfterParams) ([]Notification, error) {
+	rows, err := q.db.QueryContext(ctx, listChannelNotificationsAfter,
+		arg.Channel,
+		arg.AfterFirstSeenAt,
+		arg.AfterID,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -176,16 +203,30 @@ func (q *Queries) ListNotificationsAfter(ctx context.Context, arg ListNotificati
 	return items, nil
 }
 
-const listNotificationsFirstPage = `-- name: ListNotificationsFirstPage :many
+const listChannelNotificationsFirstPage = `-- name: ListChannelNotificationsFirstPage :many
 SELECT id, dedupe_key, channel, severity, title, detail, first_seen_at, last_sent_at, send_count, resolved_at, created_at, updated_at FROM notifications
+WHERE channel = ?
 ORDER BY first_seen_at DESC, id DESC
 LIMIT ?
 `
 
-// The register, newest first. Keyset pagination on first_seen_at with id
-// breaking the tie, the same shape every other list in this schema uses.
-func (q *Queries) ListNotificationsFirstPage(ctx context.Context, limit int64) ([]Notification, error) {
-	rows, err := q.db.QueryContext(ctx, listNotificationsFirstPage, limit)
+type ListChannelNotificationsFirstPageParams struct {
+	Channel string
+	Limit   int64
+}
+
+// The register, newest first, for one channel.
+//
+// Every subscribed channel gets its own row per condition, because each has its
+// own cooldown and its own delivery. That is right for the record and wrong for
+// a screen: with a bot configured the operator would read every condition
+// twice, once for the channel it went out on and once for the log. So the
+// register is always read one channel at a time.
+//
+// Keyset pagination on first_seen_at with id breaking the tie, the same shape
+// every other list in this schema uses.
+func (q *Queries) ListChannelNotificationsFirstPage(ctx context.Context, arg ListChannelNotificationsFirstPageParams) ([]Notification, error) {
+	rows, err := q.db.QueryContext(ctx, listChannelNotificationsFirstPage, arg.Channel, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

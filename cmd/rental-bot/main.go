@@ -265,11 +265,13 @@ func run(m modes) error {
 	// §8.3's Host class: the operator should be able to tell a restart they
 	// asked for from one they did not.
 	//
-	// "Started" is a condition rather than an event here, and the shutdown
-	// below is what clears it. An open line on the dispatch register then
-	// means the process is running and a ruled-off one means it stopped
-	// cleanly — and a crash loop, which never reaches the clear, restates the
-	// same line with a climbing tally instead of filling the register.
+	// One condition, never resolved. A restart is not news on its own — a
+	// deploy is a restart — but a *rate* of restarts is, and that is exactly
+	// what the tally in the dispatch register shows: one line saying "started,
+	// 7 times since Tuesday" rather than seven lines saying "started". A clean
+	// shutdown deliberately says nothing here; the log records it, and a
+	// message announcing that the process has gone away arrives too late to be
+	// worth anybody's attention.
 	bus.Publish(ctx, alert.Alert{
 		Key:      keyProcessStarted,
 		Severity: alert.Info,
@@ -322,22 +324,20 @@ func run(m modes) error {
 		}
 	}
 	if channel.sender != nil {
-		// This clears the started condition and then drains, so a clean stop
-		// is the last thing that goes out rather than the first thing lost.
-		bus.Resolve(shutdownCtx, keyProcessStarted, "rental-bot stopped")
+		// Last, so anything raised on the way down still has somewhere to go —
+		// and so what it cannot deliver reaches the spool rather than the
+		// floor.
 		if err := channel.sender.Stop(shutdownCtx); err != nil {
 			logger.Warn("the alert sender did not stop cleanly", "error", err)
 		}
-	} else {
-		bus.Resolve(shutdownCtx, keyProcessStarted, "rental-bot stopped")
 	}
 
 	logger.Info("stopped", "uptime", time.Since(started).Round(time.Second).String())
 	return nil
 }
 
-// keyProcessStarted names the condition "this process is running". It is
-// raised at startup and cleared at a clean shutdown.
+// keyProcessStarted names the condition "this process has been restarted".
+// It is never resolved; the tally against it is the interesting part.
 const keyProcessStarted = "host.process.started"
 
 // ingestion is what the HTTP layer needs from the Gmail subsystem. Every field

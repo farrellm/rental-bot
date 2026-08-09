@@ -278,6 +278,47 @@ func TestTheRegisterListsNoticesNewestFirst(t *testing.T) {
 	}
 }
 
+// Every subscribed channel gets its own row per condition. The screen shows
+// one channel, or the operator reads every condition twice.
+func TestTheRegisterShowsOneLinePerCondition(t *testing.T) {
+	h, opts, request := channelServer(t, true)
+
+	at := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC).Format(time.RFC3339)
+	for _, ch := range []string{"log", "telegram"} {
+		if _, err := opts.Repo.Write().InsertNotification(t.Context(), sqlc.InsertNotificationParams{
+			DedupeKey: "gmail.watch.lapsed", Channel: ch, Severity: "warning",
+			Title: "The Gmail watch has lapsed", FirstSeenAt: at, CreatedAt: at, UpdatedAt: at,
+		}); err != nil {
+			t.Fatalf("InsertNotification on %s: %v", ch, err)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, request(http.MethodGet, "/api/v1/notifications", nil))
+	var out noticeList
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Items) != 1 {
+		t.Fatalf("got %d lines for one condition, want 1", len(out.Items))
+	}
+	// With a bot configured, the channel that carries the alerts is the one
+	// worth reading.
+	if out.Items[0].Channel != "telegram" {
+		t.Errorf("channel = %q, want telegram", out.Items[0].Channel)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, request(http.MethodGet, "/api/v1/telegram", nil))
+	var standing channelStanding
+	if err := json.Unmarshal(rec.Body.Bytes(), &standing); err != nil {
+		t.Fatal(err)
+	}
+	if standing.Sent != 1 {
+		t.Errorf("tally = %d, want 1: the foot has to agree with the lines above it", standing.Sent)
+	}
+}
+
 func TestTheRegisterPages(t *testing.T) {
 	h, opts, request := channelServer(t, false)
 

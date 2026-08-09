@@ -277,7 +277,9 @@ func TestTheRegisterKeepsOneLinePerCondition(t *testing.T) {
 		bus.Publish(ctx, condition())
 	}
 
-	rows, err := repo.Read().ListNotificationsFirstPage(ctx, 10)
+	rows, err := repo.Read().ListChannelNotificationsFirstPage(ctx, sqlc.ListChannelNotificationsFirstPageParams{
+		Channel: "telegram", Limit: 10,
+	})
 	if err != nil {
 		t.Fatalf("ListNotificationsFirstPage: %v", err)
 	}
