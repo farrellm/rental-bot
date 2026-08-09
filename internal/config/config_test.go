@@ -4,9 +4,28 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
+
+// TestMain clears the RENTAL_BOT_* namespace before any test runs.
+//
+// Every test here builds the environment it wants explicitly, and several
+// assert that a variable is absent: that Load fails when the client secret is
+// missing, that Gmail is off when nothing configures it. t.Setenv can only
+// set, so absence was being inherited from whatever shell ran the tests.
+// Once a developer keeps the real values in a .envrc, those tests pass in CI
+// and fail on the machine that has the secrets — the wrong way round, and the
+// failure accuses the config rather than the test.
+func TestMain(m *testing.M) {
+	for _, kv := range os.Environ() {
+		if key, _, ok := strings.Cut(kv, "="); ok && strings.HasPrefix(key, envPrefix) {
+			os.Unsetenv(key)
+		}
+	}
+	os.Exit(m.Run())
+}
 
 func TestLoadMissingFileUsesDefaults(t *testing.T) {
 	cfg, err := Load(filepath.Join(t.TempDir(), "absent.toml"))
