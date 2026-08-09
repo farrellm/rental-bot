@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/farrellm/rental-bot/internal/alert"
 	"github.com/farrellm/rental-bot/internal/auth"
 	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
@@ -416,7 +418,8 @@ func TestWithoutSPAServesAnExplanation(t *testing.T) {
 }
 
 func TestPanicBecomesAProblem(t *testing.T) {
-	h := withRequestID(nil, withRecover(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	s := &server{log: slog.Default()}
+	h := withRequestID(nil, s.withRecover(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
 	})))
 
@@ -429,4 +432,56 @@ func TestPanicBecomesAProblem(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/problem+json") {
 		t.Errorf("Content-Type = %q, want application/problem+json", ct)
 	}
+}
+
+// A recovered panic is the one class of failure that leaves no trace on any
+// screen, so it is the one that has to be said out loud.
+func TestPanicRaisesACriticalAlert(t *testing.T) {
+	raised := &recordingPublisher{}
+	s := &server{log: slog.Default(), alerts: raised}
+	h := withRequestID(nil, s.withRecover(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("nil map write")
+	})))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/properties", nil))
+
+	if len(raised.alerts) != 1 {
+		t.Fatalf("raised %d alerts, want 1", len(raised.alerts))
+	}
+	if got := raised.alerts[0].Severity; got != alert.Critical {
+		t.Errorf("severity = %q, want %q", got, alert.Critical)
+	}
+	if !strings.Contains(raised.alerts[0].Detail, "nil map write") {
+		t.Errorf("detail = %q, want the panic value", raised.alerts[0].Detail)
+	}
+}
+
+// Nothing in cmd builds a server without a bus, but a nil one is a working
+// state and must not become a second panic inside the recover.
+func TestPanicWithoutABusStillAnswers(t *testing.T) {
+	s := &server{log: slog.Default()}
+	h := withRequestID(nil, s.withRecover(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("boom")
+	})))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+}
+
+// recordingPublisher stands in for the alert bus.
+type recordingPublisher struct {
+	alerts   []alert.Alert
+	resolved []string
+}
+
+func (p *recordingPublisher) Publish(_ context.Context, a alert.Alert) {
+	p.alerts = append(p.alerts, a)
+}
+
+func (p *recordingPublisher) Resolve(_ context.Context, key, _ string) {
+	p.resolved = append(p.resolved, key)
 }

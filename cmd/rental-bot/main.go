@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/farrellm/rental-bot/internal/alert"
 	"github.com/farrellm/rental-bot/internal/auth"
 	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
@@ -24,6 +25,7 @@ import (
 	"github.com/farrellm/rental-bot/internal/scheduler"
 	"github.com/farrellm/rental-bot/internal/secret"
 	"github.com/farrellm/rental-bot/internal/store"
+	"github.com/farrellm/rental-bot/internal/telegram"
 	"github.com/farrellm/rental-bot/internal/version"
 	"github.com/farrellm/rental-bot/migrations"
 	"github.com/farrellm/rental-bot/web"
@@ -37,6 +39,7 @@ func main() {
 		configPath  = flag.String("config", "config.toml", "path to the TOML config file; missing is not an error")
 		migrateOnly = flag.Bool("migrate", false, "apply migrations and exit")
 		newUser     = flag.String("create-user", "", "create this user (or reset their password) and exit")
+		unpair      = flag.Bool("unpair-telegram", false, "forget the paired Telegram chat and exit")
 		showVersion = flag.Bool("version", false, "print the build identity and exit")
 	)
 	flag.Parse()
@@ -46,13 +49,30 @@ func main() {
 		return
 	}
 
-	if err := run(*configPath, *migrateOnly, *newUser); err != nil {
+	if err := run(modes{
+		configPath:  *configPath,
+		migrateOnly: *migrateOnly,
+		newUser:     *newUser,
+		unpair:      *unpair,
+	}); err != nil {
 		slog.Default().Error("fatal", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(configPath string, migrateOnly bool, newUser string) error {
+// modes carries the do-one-thing-and-exit flags, so run's signature does not
+// grow a boolean per flag.
+type modes struct {
+	configPath  string
+	migrateOnly bool
+	newUser     string
+	unpair      bool
+}
+
+func run(m modes) error {
+	configPath := m.configPath
+	migrateOnly := m.migrateOnly
+	newUser := m.newUser
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return err
@@ -89,10 +109,13 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 		return nil
 	}
 
-	// After the migrations, because the users table has to exist, and before
-	// the server, because this is not a server mode.
+	// After the migrations, because the tables have to exist, and before the
+	// server, because neither of these is a server mode.
 	if newUser != "" {
 		return createUser(ctx, db, newUser)
+	}
+	if m.unpair {
+		return unpairTelegram(ctx, db)
 	}
 
 	if err := ensureDirs(cfg); err != nil {
@@ -114,20 +137,66 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 	// scheduler want done goes through here rather than running inline, so a
 	// Pub/Sub push is answered in milliseconds and a Gmail history walk
 	// happens on a worker with retries behind it.
+	// The alert bus exists whether or not there is a channel to send on. The
+	// log sink is always subscribed, so a condition raised on a host that has
+	// never paired is still recorded and still on the dispatch register — and
+	// the wiring below does not have to check for a nil bus.
+	bus := alert.New(repo, alert.Options{
+		Cooldown:         cfg.Telegram.Cooldown.Duration,
+		CriticalCooldown: cfg.Telegram.CriticalCooldown.Duration,
+		Logger:           logger,
+	})
+	bus.Subscribe(alert.NewLogSink(logger))
+
 	queue := jobs.NewQueue(repo)
 	runner := jobs.NewRunner(queue, jobs.RunnerOptions{
 		Workers:      cfg.Jobs.Workers,
 		PollInterval: cfg.Jobs.PollInterval.Duration,
 		LeaseTimeout: cfg.Jobs.LeaseTimeout.Duration,
 		Logger:       logger,
+		// A job past max_attempts is a failed row that nothing retries and
+		// nothing reads. This is the only voice it has.
+		OnDeadLetter: func(ctx context.Context, job jobs.Job, cause error) {
+			bus.Publish(ctx, alert.Alert{
+				// Keyed by kind, not by id: five sync jobs failing is one
+				// condition, and five messages about it is the noise §8.3
+				// exists to prevent.
+				Key:      "jobs.dead_letter." + job.Kind,
+				Severity: alert.Critical,
+				Title:    "A " + job.Kind + " job gave up",
+				Detail: alert.Errorf("It failed %d times and nothing will retry it. Last error: %v",
+					job.Attempts, cause),
+			})
+		},
 	})
 
 	ticker := scheduler.New(queue, runner.Notify, logger)
+	watchdog := alert.NewWatchdog(bus, logger)
+	watchdog.Add("queue", alert.QueueDepthProbe(queue, cfg.Telegram.QueueBacklogThreshold))
+	alert.RegisterSweep(runner, watchdog)
+	ticker.Add(scheduler.Task{
+		Name:  alert.KindSweep,
+		Kind:  alert.KindSweep,
+		Every: cfg.Telegram.SweepInterval.Duration,
+		// At start as well as on the tick: a process coming back after a long
+		// outage should say what is wrong now, not in five minutes.
+		AtStart: true,
+	})
 
 	// Ingestion is optional. A fresh clone has no Google project, and the whole
 	// subsystem stays unbuilt rather than being built and left to fail: no
 	// handlers, no scheduled polls, and a screen that says it is not configured.
 	ingestion, err := wireIngestion(cfg, repo, blobs, runner, ticker, logger)
+	if err != nil {
+		return err
+	}
+	if ingestion.tokens != nil {
+		watchdog.Add("gmail", gmail.Probe(ingestion.tokens, cfg.Telegram.SilenceAfter.Duration, nil))
+	}
+
+	// The channel is optional too, and for the same reason: nobody has to want
+	// a bot for the rest of this to work.
+	channel, err := wireTelegram(cfg, repo, bus, queue, runner, logger)
 	if err != nil {
 		return err
 	}
@@ -144,6 +213,8 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 		Gmail:        ingestion.tokens,
 		Archive:      ingestion.archive,
 		PushVerifier: ingestion.verifier,
+		Alerts:       bus,
+		Telegram:     channel.store,
 		Limiter:      auth.NewLimiter(),
 		Logger:       logger,
 		SPA:          web.SPA(),
@@ -172,6 +243,7 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 		"spa_embedded", web.Embedded,
 		"workers", cfg.Jobs.Workers,
 		"gmail", cfg.Gmail.Enabled(),
+		"telegram", cfg.Telegram.Enabled(),
 	)
 
 	// Background work starts before the listener: a job that was mid-run when
@@ -183,6 +255,27 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 	// waits for the work in flight.
 	runner.Start(ctx)
 	ticker.Start(ctx)
+	if channel.sender != nil {
+		channel.sender.Start(ctx)
+	}
+	if channel.poller != nil {
+		channel.poller.Start(ctx)
+	}
+
+	// §8.3's Host class: the operator should be able to tell a restart they
+	// asked for from one they did not.
+	//
+	// "Started" is a condition rather than an event here, and the shutdown
+	// below is what clears it. An open line on the dispatch register then
+	// means the process is running and a ruled-off one means it stopped
+	// cleanly — and a crash loop, which never reaches the clear, restates the
+	// same line with a climbing tally instead of filling the register.
+	bus.Publish(ctx, alert.Alert{
+		Key:      keyProcessStarted,
+		Severity: alert.Info,
+		Title:    "rental-bot started",
+		Detail:   alert.Errorf("Version %s, schema %d.", version.Version, schemaVersion),
+	})
 
 	errc := make(chan error, 1)
 	go func() {
@@ -218,9 +311,34 @@ func run(configPath string, migrateOnly bool, newUser string) error {
 		logger.Warn("job workers did not stop cleanly", "error", err)
 	}
 
+	// The poller before the sender: the poller can still be told to pair, and
+	// the sender is what has to be alive to say hello afterwards.
+	if channel.poller != nil {
+		if err := channel.poller.Stop(shutdownCtx); err != nil {
+			// Expected, and not worth an error line: the long poll is parked
+			// on a socket read Telegram holds for up to fifty seconds. Nothing
+			// is lost, because the cursor is on disk.
+			logger.Debug("the telegram long poll did not stop cleanly", "error", err)
+		}
+	}
+	if channel.sender != nil {
+		// This clears the started condition and then drains, so a clean stop
+		// is the last thing that goes out rather than the first thing lost.
+		bus.Resolve(shutdownCtx, keyProcessStarted, "rental-bot stopped")
+		if err := channel.sender.Stop(shutdownCtx); err != nil {
+			logger.Warn("the alert sender did not stop cleanly", "error", err)
+		}
+	} else {
+		bus.Resolve(shutdownCtx, keyProcessStarted, "rental-bot stopped")
+	}
+
 	logger.Info("stopped", "uptime", time.Since(started).Round(time.Second).String())
 	return nil
 }
+
+// keyProcessStarted names the condition "this process is running". It is
+// raised at startup and cleared at a clean shutdown.
+const keyProcessStarted = "host.process.started"
 
 // ingestion is what the HTTP layer needs from the Gmail subsystem. Every field
 // is nil when ingestion is not configured, and every route reads that as "not
@@ -296,6 +414,93 @@ func wireIngestion(
 		"push", verifier.Configured(),
 	)
 	return ingestion{tokens: tokens, archive: archive, verifier: verifier}, nil
+}
+
+// channel is what the rest of the process needs from the Telegram subsystem.
+// Every field is nil when no bot is configured, which is a working state.
+type channel struct {
+	store  *telegram.Store
+	sender *telegram.Sender
+	poller *telegram.Poller
+}
+
+// wireTelegram builds the alert channel, or nothing at all.
+//
+// A blank telegram.bot_username builds none of it. The alert bus still runs —
+// the log sink is subscribed either way — so conditions are still recorded and
+// still on the dispatch register; there is simply nowhere to send them.
+func wireTelegram(
+	cfg config.Config,
+	repo *store.Repo,
+	bus *alert.Bus,
+	queue *jobs.Queue,
+	runner *jobs.Runner,
+	logger *slog.Logger,
+) (channel, error) {
+	if !cfg.Telegram.Enabled() {
+		logger.Info("the alert channel is not configured; set telegram.bot_username to enable it")
+		return channel{}, nil
+	}
+
+	tokens := telegram.NewStore(repo, cfg.Telegram.PairingTTL.Duration)
+
+	spool, err := telegram.NewSpool(cfg.Storage.Spool)
+	if err != nil {
+		return channel{}, err
+	}
+	client, err := telegram.NewClient(cfg.Secrets.TelegramBotToken, telegram.DefaultBaseURL)
+	if err != nil {
+		return channel{}, err
+	}
+
+	baseURL := strings.TrimSuffix(cfg.Server.BaseURL, "/")
+	sender := telegram.NewSender(tokens, client, queue, runner.Notify, spool, telegram.SenderOptions{
+		BaseURL: baseURL,
+		Logger:  logger,
+	})
+	telegram.Register(runner, sender, logger)
+	bus.Subscribe(sender)
+
+	poller, err := telegram.NewPoller(tokens, cfg.Secrets.TelegramBotToken, telegram.DefaultBaseURL,
+		telegram.PollerOptions{
+			BaseURL:     baseURL,
+			PollTimeout: cfg.Telegram.PollInterval.Duration,
+			Logger:      logger,
+		})
+	if err != nil {
+		return channel{}, err
+	}
+
+	// A code at startup, so pairing works from a shell on a host whose web app
+	// is not reachable yet — which is the situation a first deploy is in, and
+	// the one §8.2 describes. The screen offers a fresh one; this is the
+	// fallback, not the only way.
+	logPairingCode(context.Background(), tokens, cfg.Telegram.BotUsername, logger)
+
+	logger.Info("the alert channel is configured",
+		"bot", "@"+cfg.Telegram.BotUsername,
+		"cooldown", cfg.Telegram.Cooldown.Duration,
+		"spool", spool.Dir(),
+	)
+	return channel{store: tokens, sender: sender, poller: poller}, nil
+}
+
+// logPairingCode prints a code when nobody has paired, and says nothing when
+// somebody has.
+func logPairingCode(ctx context.Context, tokens *telegram.Store, username string, logger *slog.Logger) {
+	code, expires, err := tokens.IssuePairingCode(ctx)
+	switch {
+	case errors.Is(err, telegram.ErrAlreadyPaired):
+		return
+	case err != nil:
+		logger.Error("could not issue a telegram pairing code", "error", err)
+		return
+	}
+	logger.Warn("the alert channel is not paired",
+		"send", "/start "+code,
+		"to", "@"+username,
+		"expires", expires.Format(time.RFC3339),
+	)
 }
 
 // ensureDirs creates the storage directories so a write in a later milestone
