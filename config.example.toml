@@ -25,6 +25,10 @@ read_pool_size = 4
 # Content-addressed blob store and the raw .eml archive.
 blobs = "data/blobs"
 raw_email = "data/raw-email"
+# Where an alert waits when it could not be delivered as it was raised. A
+# critical alert cannot ride the job queue — the queue is one of the things it
+# reports on — so it goes to disk and is drained on the next attempt.
+spool = "data/spool"
 # The largest document that can be uploaded, in bytes. The cap is applied to
 # the request body, so anything past it is refused before it reaches the disk.
 max_upload_bytes = 26214400 # 25 MiB
@@ -65,6 +69,37 @@ max_attachment_bytes = 26214400 # 25 MiB
 audience = ""
 service_account = ""
 
+[telegram]
+# The alert channel. A blank bot_username is the off switch: the process runs
+# without a bot, and the intake screen says it is not set up rather than
+# pretending nobody has paired. Set it and everything below is required.
+#
+# Talk to @BotFather to create a bot; it gives you the username and the token.
+# The token goes in the environment, not here.
+bot_username = ""
+# How long a condition stays quiet after it has been reported. An alert channel
+# noisy enough to be muted is worse than no channel at all.
+cooldown = "6h"
+# The same for critical alerts, which are worth restating sooner. It cannot be
+# longer than cooldown — that would restate a critical condition less often
+# than an ordinary one.
+critical_cooldown = "1h"
+# How long a pairing code is good for. It is single-use and shown once, in the
+# log and on the intake screen.
+pairing_ttl = "10m"
+# The getUpdates long-poll timeout. Telegram holds the request open for it and
+# closes it at 50s regardless, so this is not a busy loop's period.
+poll_interval = "30s"
+# How often the probes run: how late a condition nobody publishes an event for
+# — a lapsed watch, a queue backlog — is noticed.
+sweep_interval = "5m"
+# How many pending jobs is too many. 0 turns the check off.
+queue_backlog_threshold = 50
+# How long a connected mailbox may deliver nothing before that is worth saying
+# out loud. Long enough for a quiet weekend, short enough that a revoked grant
+# is not discovered a fortnight later.
+silence_after = "48h"
+
 [jobs]
 # The worker pool draining the jobs table. Writes serialize on one SQLite
 # connection regardless, so this bounds overlapping network calls rather than
@@ -86,9 +121,14 @@ format = "text"
 #   RENTAL_BOT_SECRET_KEY          the AES-GCM key protecting encrypted columns
 #   RENTAL_BOT_SECRET_KEY_FILE     a path to that key; the file must be mode 0600
 #   RENTAL_BOT_GMAIL_CLIENT_SECRET the OAuth client secret
+#   RENTAL_BOT_TELEGRAM_BOT_TOKEN  the bot token from @BotFather
 #
 # The encryption key is required once gmail.client_id is set: the refresh token
 # is stored encrypted, so a database copy without the key does not hand over
 # the mailbox.
+#
+# The bot token is not stored anywhere. Leaking it grants the ability to send
+# *as* the bot, not to command it — authorization is the stored chat_id, and
+# re-pairing needs server access.
 #
 # Setting a [secrets] table in this file has no effect.

@@ -30,6 +30,7 @@ type Config struct {
 	Database Database `toml:"database"`
 	Storage  Storage  `toml:"storage"`
 	Gmail    Gmail    `toml:"gmail"`
+	Telegram Telegram `toml:"telegram"`
 	Jobs     Jobs     `toml:"jobs"`
 	Log      Log      `toml:"log"`
 
@@ -60,6 +61,11 @@ type Database struct {
 type Storage struct {
 	Blobs    string `toml:"blobs"`
 	RawEmail string `toml:"raw_email"`
+	// Spool holds what could not be delivered when it was raised. A critical
+	// alert cannot ride the job queue — the queue is one of the things it
+	// reports on (§8.4) — so it goes to disk instead and is drained on the next
+	// attempt.
+	Spool string `toml:"spool"`
 	// MaxUploadBytes caps one document. It is a cap on the request body, so it
 	// is enforced before the bytes reach the disk rather than after. §5.3 asks
 	// for the same cap on email attachments, and M3 reads this one.
@@ -116,6 +122,50 @@ type PubSub struct {
 // Enabled reports whether email ingestion is configured at all.
 func (g Gmail) Enabled() bool { return g.ClientID != "" }
 
+// Telegram configures the alert channel (docs/DESIGN.md §8).
+//
+// An empty BotUsername disables the whole subsystem: no sender, no pairing
+// loop, no scheduled sweep, and an intake screen that says it is not set up
+// rather than pretending nobody has paired. That is the state a fresh clone is
+// in, and it has to be a working state.
+//
+// The username is the off switch rather than the token for the same reason
+// gmail.client_id is: a non-secret in the file, the secret in the environment.
+// It also earns its place — the screen has to say which bot to send /start to,
+// and asking Telegram costs a round trip to learn something the operator
+// already knows.
+type Telegram struct {
+	// BotUsername is the bot's @name, without the @. BotToken is not here on
+	// purpose — it is a secret, and secrets come from the environment.
+	BotUsername string `toml:"bot_username"`
+	// Cooldown is how long a condition stays quiet after it has been reported.
+	// §8.3: "an alert channel noisy enough to be muted is worse than no channel
+	// at all."
+	Cooldown Duration `toml:"cooldown"`
+	// CriticalCooldown is the same for critical alerts, which are worth
+	// restating sooner because nobody is going to fix a thing they forgot.
+	CriticalCooldown Duration `toml:"critical_cooldown"`
+	// PairingTTL bounds how long a pairing code is good for. §8.2 says ten
+	// minutes and single-use.
+	PairingTTL Duration `toml:"pairing_ttl"`
+	// PollInterval is the getUpdates long-poll timeout. Telegram holds the
+	// request open for it, so this is not a busy loop's period.
+	PollInterval Duration `toml:"poll_interval"`
+	// SweepInterval is how often the probes run. It bounds how late a condition
+	// nobody publishes an event for — a lapsed watch, a backlog — is noticed.
+	SweepInterval Duration `toml:"sweep_interval"`
+	// QueueBacklogThreshold is how many pending jobs is too many. Zero disables
+	// the check rather than alerting on every job.
+	QueueBacklogThreshold int `toml:"queue_backlog_threshold"`
+	// SilenceAfter is how long a connected mailbox may go without delivering
+	// anything before that is worth saying out loud. §12 lists silent ingestion
+	// stoppage as a risk, and this is its mitigation.
+	SilenceAfter Duration `toml:"silence_after"`
+}
+
+// Enabled reports whether the alert channel is configured at all.
+func (t Telegram) Enabled() bool { return t.BotUsername != "" }
+
 // Jobs configures the worker pool that drains the jobs table.
 type Jobs struct {
 	// Workers bounds concurrency. Writes serialize on one SQLite connection
@@ -147,6 +197,15 @@ type Secrets struct {
 	Key []byte
 	// GmailClientSecret pairs with Gmail.ClientID.
 	GmailClientSecret string
+	// TelegramBotToken pairs with Telegram.BotUsername.
+	//
+	// §9.2 lists the bot token under field encryption, alongside the Gmail
+	// refresh token. It is here instead, and no column holds it. The refresh
+	// token is encrypted in the database because OAuth produces it at runtime
+	// and there is nowhere else for it to live; a bot token is a static
+	// credential the operator configures once, which makes it the same kind of
+	// thing as the Gmail client secret directly above.
+	TelegramBotToken string
 }
 
 // Duration is a time.Duration that reads from TOML and from an environment
@@ -184,6 +243,7 @@ func Default() Config {
 		Storage: Storage{
 			Blobs:    "data/blobs",
 			RawEmail: "data/raw-email",
+			Spool:    "data/spool",
 			// Comfortably past a scanned lease, well short of anything that
 			// would be a memory problem to receive.
 			MaxUploadBytes: 25 << 20, // 25 MiB
@@ -199,6 +259,28 @@ func Default() Config {
 			// days of failures before anything is actually lost.
 			WatchRenewInterval: Duration{24 * time.Hour},
 			MaxAttachmentBytes: 25 << 20, // 25 MiB, matching one upload
+		},
+		Telegram: Telegram{
+			// Six hours is §8.3's figure. Long enough that a condition nobody
+			// has got to yet does not nag, short enough that a condition
+			// nobody has got to in a working day says so again.
+			Cooldown: Duration{6 * time.Hour},
+			// Critical means the thing is broken now. An hour is the longest
+			// that should pass without a reminder.
+			CriticalCooldown: Duration{time.Hour},
+			PairingTTL:       Duration{10 * time.Minute},
+			// Telegram's own maximum for a long poll is 50 seconds.
+			PollInterval: Duration{30 * time.Second},
+			// Five minutes bounds how late a lapsed watch or a backlog is
+			// noticed. The conditions the probes watch move in hours.
+			SweepInterval: Duration{5 * time.Minute},
+			// Two workers draining a queue that normally holds one or two jobs.
+			// Fifty pending means something has stopped draining it.
+			QueueBacklogThreshold: 50,
+			// Two days of nothing at all from a connected mailbox. Long enough
+			// to cover a quiet weekend, short enough that a revoked grant is
+			// not discovered a fortnight later.
+			SilenceAfter: Duration{48 * time.Hour},
 		},
 		Jobs: Jobs{
 			Workers:      2,
@@ -252,6 +334,7 @@ func (c *Config) overlayEnv() error {
 	}
 	envString("STORAGE_BLOBS", &c.Storage.Blobs)
 	envString("STORAGE_RAW_EMAIL", &c.Storage.RawEmail)
+	envString("STORAGE_SPOOL", &c.Storage.Spool)
 	if err := envInt64("STORAGE_MAX_UPLOAD_BYTES", &c.Storage.MaxUploadBytes); err != nil {
 		return err
 	}
@@ -272,6 +355,29 @@ func (c *Config) overlayEnv() error {
 	envString("GMAIL_PUBSUB_AUDIENCE", &c.Gmail.PubSub.Audience)
 	envString("GMAIL_PUBSUB_SERVICE_ACCOUNT", &c.Gmail.PubSub.ServiceAccount)
 
+	envString("TELEGRAM_BOT_USERNAME", &c.Telegram.BotUsername)
+	if err := envDuration("TELEGRAM_COOLDOWN", &c.Telegram.Cooldown); err != nil {
+		return err
+	}
+	if err := envDuration("TELEGRAM_CRITICAL_COOLDOWN", &c.Telegram.CriticalCooldown); err != nil {
+		return err
+	}
+	if err := envDuration("TELEGRAM_PAIRING_TTL", &c.Telegram.PairingTTL); err != nil {
+		return err
+	}
+	if err := envDuration("TELEGRAM_POLL_INTERVAL", &c.Telegram.PollInterval); err != nil {
+		return err
+	}
+	if err := envDuration("TELEGRAM_SWEEP_INTERVAL", &c.Telegram.SweepInterval); err != nil {
+		return err
+	}
+	if err := envInt("TELEGRAM_QUEUE_BACKLOG_THRESHOLD", &c.Telegram.QueueBacklogThreshold); err != nil {
+		return err
+	}
+	if err := envDuration("TELEGRAM_SILENCE_AFTER", &c.Telegram.SilenceAfter); err != nil {
+		return err
+	}
+
 	if err := envInt("JOBS_WORKERS", &c.Jobs.Workers); err != nil {
 		return err
 	}
@@ -291,6 +397,7 @@ func (c *Config) overlayEnv() error {
 // loadSecrets reads the encryption key from the environment or a key file.
 func (c *Config) loadSecrets() error {
 	envString("GMAIL_CLIENT_SECRET", &c.Secrets.GmailClientSecret)
+	envString("TELEGRAM_BOT_TOKEN", &c.Secrets.TelegramBotToken)
 
 	if v, ok := os.LookupEnv(envPrefix + "SECRET_KEY"); ok && v != "" {
 		c.Secrets.Key = []byte(v)
@@ -343,7 +450,10 @@ func (c Config) Validate() error {
 	if err := c.validateJobs(); err != nil {
 		return err
 	}
-	return c.validateGmail()
+	if err := c.validateGmail(); err != nil {
+		return err
+	}
+	return c.validateTelegram()
 }
 
 // validateGmail checks the ingestion settings, and only when there are any.
@@ -387,6 +497,57 @@ func (c Config) validateGmail() error {
 	return nil
 }
 
+// validateTelegram checks the alert channel, and only when there is one.
+//
+// A blank telegram.bot_username is the off switch, the same way a blank
+// gmail.client_id is. Set it, though, and everything it needs has to be there —
+// half-configured alerting fails at the first outage, which is the worst
+// possible moment to find out the channel was never going to work.
+func (c Config) validateTelegram() error {
+	if !c.Telegram.Enabled() {
+		return nil
+	}
+	if c.Secrets.TelegramBotToken == "" {
+		return errors.New("telegram.bot_username is set but RENTAL_BOT_TELEGRAM_BOT_TOKEN is empty")
+	}
+	// A bare @ is a common paste; it is not part of the name.
+	if strings.HasPrefix(c.Telegram.BotUsername, "@") {
+		return fmt.Errorf("telegram.bot_username is %q; drop the leading @", c.Telegram.BotUsername)
+	}
+	if c.Telegram.Cooldown.Duration < time.Minute {
+		return fmt.Errorf("telegram.cooldown is %s; it must be at least 1m", c.Telegram.Cooldown)
+	}
+	if c.Telegram.CriticalCooldown.Duration < time.Minute {
+		return fmt.Errorf("telegram.critical_cooldown is %s; it must be at least 1m", c.Telegram.CriticalCooldown)
+	}
+	// A critical condition restated less often than an ordinary one inverts the
+	// severities, which is the sort of mistake that only shows up in an outage.
+	if c.Telegram.CriticalCooldown.Duration > c.Telegram.Cooldown.Duration {
+		return fmt.Errorf("telegram.critical_cooldown is %s, longer than telegram.cooldown %s; a critical condition would be restated less often than an ordinary one",
+			c.Telegram.CriticalCooldown, c.Telegram.Cooldown)
+	}
+	if c.Telegram.PairingTTL.Duration < time.Minute {
+		return fmt.Errorf("telegram.pairing_ttl is %s; it must be at least 1m", c.Telegram.PairingTTL)
+	}
+	// Telegram closes a getUpdates long poll at 50 seconds regardless.
+	if c.Telegram.PollInterval.Duration < time.Second || c.Telegram.PollInterval.Duration > 50*time.Second {
+		return fmt.Errorf("telegram.poll_interval is %s; it must be between 1s and 50s", c.Telegram.PollInterval)
+	}
+	if c.Telegram.SweepInterval.Duration < time.Minute {
+		return fmt.Errorf("telegram.sweep_interval is %s; it must be at least 1m", c.Telegram.SweepInterval)
+	}
+	if c.Telegram.QueueBacklogThreshold < 0 {
+		return fmt.Errorf("telegram.queue_backlog_threshold is %d; it must not be negative", c.Telegram.QueueBacklogThreshold)
+	}
+	if c.Telegram.SilenceAfter.Duration < time.Minute {
+		return fmt.Errorf("telegram.silence_after is %s; it must be at least 1m", c.Telegram.SilenceAfter)
+	}
+	if c.Storage.Spool == "" {
+		return errors.New("telegram.bot_username is set but storage.spool is empty; a critical alert has nowhere to wait when Telegram is unreachable")
+	}
+	return nil
+}
+
 func (c Config) validateJobs() error {
 	if c.Jobs.Workers < 1 {
 		return fmt.Errorf("jobs.workers is %d; it must be at least 1", c.Jobs.Workers)
@@ -407,6 +568,7 @@ func (c Config) Dirs() []string {
 		filepath.Dir(c.Database.Path),
 		c.Storage.Blobs,
 		c.Storage.RawEmail,
+		c.Storage.Spool,
 	}
 }
 
