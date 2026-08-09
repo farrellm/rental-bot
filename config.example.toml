@@ -95,9 +95,9 @@ poll_interval = "30s"
 sweep_interval = "5m"
 # How many pending jobs is too many. 0 turns the check off.
 queue_backlog_threshold = 50
-# How long a connected mailbox may deliver nothing before that is worth saying
-# out loud. Long enough for a quiet weekend, short enough that a revoked grant
-# is not discovered a fortnight later.
+# How long a connected mailbox may go unchecked before that is worth saying out
+# loud. This measures the poll, not the mail: a quiet week is normal, a poller
+# that stopped running is not.
 silence_after = "48h"
 
 [jobs]

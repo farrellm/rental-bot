@@ -202,6 +202,75 @@ func TestFailureRetriesThenGivesUp(t *testing.T) {
 	}
 }
 
+// Nothing retries a dead letter and nothing else reads the row, so this
+// callback is the only voice it has.
+func TestDeadLetterIsReportedOnce(t *testing.T) {
+	queue, _ := openQueue(t)
+
+	var (
+		mu    sync.Mutex
+		dead  []Job
+		cause error
+	)
+	runner := NewRunner(queue, RunnerOptions{
+		Workers: 1, PollInterval: 10 * time.Millisecond, Logger: quietLogger(),
+		OnDeadLetter: func(_ context.Context, job Job, err error) {
+			mu.Lock()
+			defer mu.Unlock()
+			dead = append(dead, job)
+			cause = err
+		},
+	})
+	runner.Handle("test.doomed", func(context.Context, Job) error {
+		return errors.New("the vendor's server said no")
+	})
+
+	// Two attempts: the first retries and must say nothing, the second is the
+	// last and must report.
+	id, err := queue.Enqueue(t.Context(), "test.doomed", nil, Options{MaxAttempts: 2})
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	for range 2 {
+		if err := queue.repo.Write().RetryJob(t.Context(), sqlc.RetryJobParams{
+			RunAfter: stamp(time.Now()), UpdatedAt: stamp(time.Now()), ID: id,
+		}); err != nil {
+			t.Fatalf("make the job runnable: %v", err)
+		}
+		if _, err := runner.runOne(t.Context(), "worker-1"); err != nil {
+			t.Fatalf("runOne: %v", err)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(dead) != 1 {
+		t.Fatalf("OnDeadLetter ran %d times, want 1: a retry is not a dead letter", len(dead))
+	}
+	if dead[0].ID != id || dead[0].Kind != "test.doomed" {
+		t.Errorf("OnDeadLetter got job %+v, want id %d of kind test.doomed", dead[0], id)
+	}
+	if cause == nil {
+		t.Error("OnDeadLetter was not told what went wrong")
+	}
+}
+
+// A runner with no callback is the ordinary case, and must not panic on it.
+func TestDeadLetterWithoutACallback(t *testing.T) {
+	queue, _ := openQueue(t)
+
+	runner := NewRunner(queue, RunnerOptions{Workers: 1, PollInterval: 10 * time.Millisecond, Logger: quietLogger()})
+	runner.Handle("test.doomed", func(context.Context, Job) error {
+		return errors.New("no")
+	})
+	if _, err := queue.Enqueue(t.Context(), "test.doomed", nil, Options{MaxAttempts: 1}); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	if _, err := runner.runOne(t.Context(), "worker-1"); err != nil {
+		t.Fatalf("runOne: %v", err)
+	}
+}
+
 // A handler that panics must fail its job, not take the worker with it.
 func TestPanicBecomesAFailure(t *testing.T) {
 	queue, _ := openQueue(t)

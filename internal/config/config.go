@@ -157,9 +157,10 @@ type Telegram struct {
 	// QueueBacklogThreshold is how many pending jobs is too many. Zero disables
 	// the check rather than alerting on every job.
 	QueueBacklogThreshold int `toml:"queue_backlog_threshold"`
-	// SilenceAfter is how long a connected mailbox may go without delivering
-	// anything before that is worth saying out loud. §12 lists silent ingestion
-	// stoppage as a risk, and this is its mitigation.
+	// SilenceAfter is how long a connected mailbox may go unchecked before that
+	// is worth saying out loud. §12 lists silent ingestion stoppage as a risk,
+	// and this is its mitigation. It measures the poll, not the mail: a quiet
+	// week is normal, a poller that stopped running is not.
 	SilenceAfter Duration `toml:"silence_after"`
 }
 
@@ -277,9 +278,9 @@ func Default() Config {
 			// Two workers draining a queue that normally holds one or two jobs.
 			// Fifty pending means something has stopped draining it.
 			QueueBacklogThreshold: 50,
-			// Two days of nothing at all from a connected mailbox. Long enough
-			// to cover a quiet weekend, short enough that a revoked grant is
-			// not discovered a fortnight later.
+			// Two days without the mailbox being checked at all, against a
+			// poller that runs every ten minutes. Anything shorter would fire
+			// on a laptop that was asleep over a weekend.
 			SilenceAfter: Duration{48 * time.Hour},
 		},
 		Jobs: Jobs{
