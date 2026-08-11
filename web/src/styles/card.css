@@ -314,6 +314,18 @@
   color: var(--muted-ink);
 }
 
+/* The alert channel. Paired is the working state. Muted is quiet on purpose --
+   the operator asked for it, so it goes the colour of history rather than the
+   colour of fault. A channel that cannot be reached wears --oxide through
+   .stamp--no-contact, which it shares with the service record. */
+.stamp--paired {
+  color: var(--verdigris);
+}
+
+.stamp--muted {
+  color: var(--muted-ink);
+}
+
 /* Intake, one message. Received and applied are done with; parsing and
    needs-review are outstanding; failed is a fault. Ignored is history rather
    than fault -- a sender off the allowlist is the allowlist working. */

@@ -12,12 +12,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/farrellm/rental-bot/internal/alert"
 	"github.com/farrellm/rental-bot/internal/auth"
 	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
 	"github.com/farrellm/rental-bot/internal/gmail"
 	"github.com/farrellm/rental-bot/internal/jobs"
 	"github.com/farrellm/rental-bot/internal/store"
+	"github.com/farrellm/rental-bot/internal/telegram"
 )
 
 // Health is the slice of the store the health and status endpoints need.
@@ -59,6 +61,14 @@ type Options struct {
 	// every push -- failing open would put an unauthenticated enqueue endpoint
 	// on the public internet.
 	PushVerifier *gmail.Verifier
+	// Alerts is where a condition worth waking somebody for goes. A nil one
+	// means alerting is not configured, which is a working state — the process
+	// still logs, it just says nothing out loud.
+	Alerts alert.Publisher
+	// Telegram owns the paired chat. A nil Telegram means no bot is
+	// configured: the routes answer 503 and the intake screen says which
+	// configuration keys are missing.
+	Telegram *telegram.Store
 	// Limiter throttles sign-in attempts. A nil Limiter gets a fresh one.
 	Limiter *auth.Limiter
 	Logger  *slog.Logger
@@ -87,6 +97,9 @@ type server struct {
 	gmail        *gmail.Store
 	archive      *gmail.Archive
 	pushVerifier *gmail.Verifier
+
+	alerts   alert.Publisher
+	telegram *telegram.Store
 
 	// pushRefusals guards the counter behind the throttled log line for
 	// unauthenticated pushes.
@@ -122,6 +135,9 @@ func New(opts Options) http.Handler {
 		gmail:        opts.Gmail,
 		archive:      opts.Archive,
 		pushVerifier: opts.PushVerifier,
+
+		alerts:   opts.Alerts,
+		telegram: opts.Telegram,
 	}
 
 	mux := http.NewServeMux()
@@ -147,6 +163,7 @@ func New(opts Options) http.Handler {
 	s.routeLeases(mux)
 	s.routeTenants(mux)
 	s.routeIntake(mux)
+	s.routeTelegram(mux)
 
 	// Anything else under /api/ is a client mistake, and it gets a
 	// problem+json 404 rather than the SPA's index.html.
@@ -155,7 +172,7 @@ func New(opts Options) http.Handler {
 	})
 	mux.Handle("/", s.spaHandler())
 
-	return withRequestID(opts.Logger, withAccessLog(withRecover(mux)))
+	return withRequestID(opts.Logger, withAccessLog(s.withRecover(mux)))
 }
 
 // guarded wraps a handler so it is reachable only with a live session, and

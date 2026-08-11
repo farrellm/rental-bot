@@ -83,7 +83,50 @@ func (s *server) runChecks(ctx context.Context) []Check {
 		checks = append(checks, Check{Name: "schema", OK: true, Detail: "version " + strconv.Itoa(version)})
 	}
 
-	return append(checks, s.ingestionChecks(ctx)...)
+	checks = append(checks, s.ingestionChecks(ctx)...)
+	return append(checks, s.channelChecks(ctx)...)
+}
+
+// channelChecks reports on the alert channel.
+//
+// Nothing here fails readiness, and that is the point. A channel nobody asked
+// for is not a fault; an unpaired one is a setup step, not an outage; and a
+// degraded one is the alerting subsystem being unwell, which the API serving
+// the ledger has no business refusing traffic over. The condition is in the
+// detail, where a person reads it.
+func (s *server) channelChecks(ctx context.Context) []Check {
+	if !s.cfg.Telegram.Enabled() || s.telegram == nil {
+		return []Check{{
+			Name: "telegram", OK: true,
+			Detail: "Not configured. Set telegram.bot_username to enable alerting.",
+		}}
+	}
+
+	state, err := s.telegram.State(ctx)
+	if err != nil {
+		loggerFrom(ctx).Error("telegram check failed", "error", err)
+		return []Check{{Name: "telegram", Detail: "The channel could not be read. " + err.Error()}}
+	}
+
+	switch {
+	case !state.Paired():
+		return []Check{{
+			Name: "telegram", OK: true,
+			Detail: "Configured but no chat is paired. Pair one on the Intake screen.",
+		}}
+	case state.Status == "degraded":
+		return []Check{{
+			Name: "telegram", OK: true,
+			Detail: "The last message could not be delivered: " + state.LastError,
+		}}
+	case state.Muted(time.Now().UTC()):
+		return []Check{{
+			Name: "telegram", OK: true,
+			Detail: "Paired, muted until " + state.MutedUntil.Format(time.RFC3339) + ".",
+		}}
+	default:
+		return []Check{{Name: "telegram", OK: true, Detail: "Paired."}}
+	}
 }
 
 // ingestionChecks reports on the Gmail connection, its watch, and its sync

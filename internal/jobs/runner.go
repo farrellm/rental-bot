@@ -32,6 +32,14 @@ type RunnerOptions struct {
 	// LeaseTimeout is how long a claimed job may stay locked before it is
 	// assumed abandoned.
 	LeaseTimeout time.Duration
+	// OnDeadLetter is called once for a job that has run out of attempts.
+	//
+	// It is a callback rather than an alert.Publisher because this package is
+	// the queue, not an alert client: the caller decides that a dead letter is
+	// worth waking somebody for, and this only decides when one happened. It
+	// may be nil, and it must not block — the worker that calls it is holding
+	// a slot in the pool.
+	OnDeadLetter func(ctx context.Context, job Job, cause error)
 	Logger       *slog.Logger
 }
 
@@ -220,9 +228,12 @@ func (r *Runner) runOne(ctx context.Context, worker string) (bool, error) {
 		if retrying {
 			log.Warn("job failed, will retry", "error", err, "duration", time.Since(start))
 		} else {
-			// Out of attempts. M3.5 gives this an alert to publish; until then
-			// it is an error line and a failed row on the intake screen.
+			// Out of attempts. Nothing retries the row and nothing else reads
+			// it, so this callback is the only voice a dead letter has.
 			log.Error("job failed for the last time", "error", err, "duration", time.Since(start))
+			if r.opts.OnDeadLetter != nil {
+				r.opts.OnDeadLetter(ctx, job, err)
+			}
 		}
 	}
 	return true, nil

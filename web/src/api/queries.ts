@@ -17,6 +17,7 @@ import {
 
 import { request } from "./client";
 import type {
+  ChannelStanding,
   ConnectResponse,
   Document,
   DocumentKind,
@@ -27,6 +28,8 @@ import type {
   Lease,
   LeaseList,
   LeaseWrite,
+  NoticePage,
+  PairingCode,
   PropertyDetail,
   PropertyPage,
   PropertyWrite,
@@ -73,6 +76,12 @@ export const keys = {
   // doing anything.
   intake: ["intake"] as const,
   emailMessages: ["intake", "messages"] as const,
+
+  // The channel alerts go out on, and the register of what went out. Polled
+  // for the same reason the mail room is: both change without the operator
+  // doing anything.
+  channel: ["channel"] as const,
+  notices: ["channel", "notices"] as const,
 };
 
 /* Session ------------------------------------------------------------------ */
@@ -571,6 +580,66 @@ export function useSyncNow(): UseMutationResult<{ queued: boolean }, Error, void
       window.setTimeout(() => {
         void client.invalidateQueries({ queryKey: keys.intake });
         void client.invalidateQueries({ queryKey: keys.emailMessages });
+      }, 1_500);
+    },
+  });
+}
+
+/**
+ * The alert channel's standing.
+ *
+ * Polled, like the mailbox's, because everything it reports can change without
+ * the operator doing anything: a pairing lands, a delivery fails, a condition
+ * goes out. A stale answer here says alerts are arriving when they are not.
+ */
+export function useChannelStanding(): UseQueryResult<ChannelStanding, Error> {
+  return useQuery({
+    queryKey: keys.channel,
+    queryFn: ({ signal }) => request<ChannelStanding>("/api/v1/telegram", { signal }),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useNotices(): UseQueryResult<NoticePage, Error> {
+  return useQuery({
+    queryKey: keys.notices,
+    queryFn: ({ signal }) => request<NoticePage>("/api/v1/notifications", { signal }),
+    refetchInterval: 15_000,
+  });
+}
+
+/**
+ * Mints a pairing code.
+ *
+ * The code is in this response and nowhere else — only its hash is stored — so
+ * the caller holds on to what it returns rather than expecting to read it back
+ * off the standing.
+ */
+export function useIssuePairingCode(): UseMutationResult<PairingCode, Error, void> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<PairingCode>("/api/v1/telegram/pairing-code", { method: "POST" }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.channel });
+    },
+  });
+}
+
+/**
+ * Sends one notice, to prove the channel works.
+ *
+ * The register is invalidated after a beat: routine delivery goes through the
+ * job queue, so refetching the instant this returns shows the same page back.
+ * The same wait the sync button takes, for the same reason.
+ */
+export function useSendTestNotice(): UseMutationResult<{ sent: boolean }, Error, void> {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<{ sent: boolean }>("/api/v1/telegram/test", { method: "POST" }),
+    onSuccess: () => {
+      window.setTimeout(() => {
+        void client.invalidateQueries({ queryKey: keys.channel });
+        void client.invalidateQueries({ queryKey: keys.notices });
       }, 1_500);
     },
   });

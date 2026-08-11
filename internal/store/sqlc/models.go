@@ -127,6 +127,21 @@ type LeaseTenant struct {
 	UpdatedAt string
 }
 
+type Notification struct {
+	ID          int64
+	DedupeKey   string
+	Channel     string
+	Severity    string
+	Title       string
+	Detail      string
+	FirstSeenAt string
+	LastSentAt  *string
+	SendCount   int64
+	ResolvedAt  *string
+	CreatedAt   string
+	UpdatedAt   string
+}
+
 type Property struct {
 	ID                 int64
 	Nickname           string
@@ -189,6 +204,21 @@ type Session struct {
 	LastSeenAt string
 	CreatedAt  string
 	UpdatedAt  string
+}
+
+type TelegramState struct {
+	ID               int64
+	ChatID           *int64
+	LastUpdateID     int64
+	MutedUntil       *string
+	PairedAt         *string
+	PairingCodeHash  string
+	PairingExpiresAt *string
+	LastSentAt       *string
+	LastError        string
+	Status           string
+	CreatedAt        string
+	UpdatedAt        string
 }
 
 type Tenant struct {

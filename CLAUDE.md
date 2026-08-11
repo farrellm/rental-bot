@@ -8,9 +8,10 @@ pipeline, the LLM boundary, valuations, alerting, and the milestone plan. Read
 it before proposing anything structural; this file records only what the code
 does not already say.
 
-Current milestone: **M3 complete** (Gmail watch, webhook, fallback poller, raw
-archive, plus the job queue and scheduler they run on). Next is M3.5 — the
-alert bus and Telegram pairing, outbound only.
+Current milestone: **M3.5 complete** (the alert bus with its cooldown, the
+Telegram channel, pairing, and the dispatch register — outbound only; inbound
+commands are M6's). Next is M4 — LLM classify/extract, `ingest_proposals`, and
+the Review inbox.
 
 ## Commands
 
@@ -26,7 +27,8 @@ alert bus and Telegram pairing, outbound only.
 | `make test` / `make test-web` | Either half of the test suite alone |
 
 `./bin/rental-bot -create-user <name>` is the only way a user is created.
-There is no registration endpoint by design.
+There is no registration endpoint by design. `-unpair-telegram` is the only way
+to change who the alert channel trusts, for the same kind of reason.
 
 ## Layout
 
@@ -39,6 +41,8 @@ internal/domain     Money, address normalization
 internal/blob       content-addressed store for document bytes
 internal/secret     AES-GCM for the encrypted columns, HKDF off the secret key
 internal/gmail      OAuth, watch, history sync, MIME parse, raw archive, OIDC
+internal/alert      the bus: severities, dedupe, cooldown, probes, sinks
+internal/telegram   pairing, the long-poll loop, the sender and its spool
 internal/jobs       SQLite-backed queue and the worker pool that drains it
 internal/scheduler  the ticker that enqueues periodic work
 internal/httpapi    handlers, DTOs, middleware, problem+json, SPA serving
@@ -48,10 +52,10 @@ web/                Vite React app, plus the build-tagged embed
 ```
 
 The packages in `docs/DESIGN.md` §10 that are not listed here — `ingest`,
-`llm`, `valuation`, `alert`, `telegram` — arrive with the milestones that need
-them. Don't create them empty ahead of time. `internal/secret` is not in §10's
-list; it exists because §9.2's field encryption needed a home once M3 added the
-first encrypted column.
+`llm`, `valuation` — arrive with the milestones that need them. Don't create
+them empty ahead of time. `internal/secret` is not in §10's list; it exists
+because §9.2's field encryption needed a home once M3 added the first encrypted
+column.
 
 ## sqlc
 
@@ -167,6 +171,34 @@ decision, not a refactor.
   bound to the session. Without the binding an attacker starts the OAuth flow
   with their own account and hands the callback to the operator, whose session
   then has the attacker's mailbox attached to it.
+- **An alert `Key` names the condition, not the occurrence.** A job kind that
+  keeps failing is one key, not one per job id; a route that keeps panicking is
+  one key, not one per request. The cooldown, the tally, and the recovery
+  message all hang off that distinction, and getting it wrong turns
+  deduplication off without appearing to. Keys are dotted constants next to the
+  code that raises them, never built from a message.
+- **Critical alerts do not ride the job queue.** An alert reporting that the
+  queue is stuck cannot be enqueued on the stuck queue. They take a buffered
+  channel drained by a dedicated goroutine, with bounded retry and a disk spool
+  under `storage.spool`; routine alerts go through the queue and inherit its
+  retries. Moving either onto the other path is a change to the reliability
+  story, not a simplification.
+- **The alert bus records before it delivers, and never rolls that back.** A
+  condition that was noticed and could not be sent is still a condition that
+  was noticed; the sink owns retrying. `Publish` returns no error on purpose —
+  every caller is something that has just found a problem and has its own work
+  to get back to.
+- **`internal/alert` must not import `internal/telegram`.** A channel is a
+  `Sink`, and the queue-backed one lives in `telegram`, which imports both. The
+  same rule is why `jobs.RunnerOptions.OnDeadLetter` is a callback rather than
+  an `alert.Publisher`: the queue is a queue, not an alert client.
+- **Re-pairing Telegram needs a shell on the host.** `-unpair-telegram` and
+  nothing else. The web can issue a pairing code for an *unpaired* channel, so
+  a first deploy does not need SSH, and is refused with a 409 once a chat is
+  paired — a hijacked session must not be able to move the alert channel to the
+  attacker's own chat, because that channel is what would report the hijack.
+  Only the SHA-256 of a code is stored, and the single-use guard is in the
+  `UPDATE` rather than in Go.
 - **A job handler must be idempotent**, because the queue is at-least-once by
   construction: a process killed after the work and before the row is marked
   done runs it again. `attempts` increments on *claim*, not on failure, so a
@@ -210,9 +242,23 @@ decision, not a refactor.
   FAILED for one message. All seven message words exist now even though M3
   writes three, so the register can never show a state it has no word for.
   NOT SET UP and NOT CONNECTED are different claims and both are fine: nobody
-  asked for ingestion, versus somebody did and did not finish.
+  asked for ingestion, versus somebody did and did not finish. M3.5 adds only
+  PAIRED and MUTED, for the alert channel, and reuses NOT SET UP, NOT CONNECTED
+  and NO CONTACT — they are the same three claims about a different subsystem,
+  and a reader should not have to learn a second set of words for them.
   Every variant is one `color:` declaration, because the border, inner ring,
   and divider all take `currentcolor`. It stays the only thing that moves.
+- **Severity is a margin mark, not a stamp.** The stamp means "the state of
+  this thing"; a notice's severity is a property of it. On the dispatch
+  register it is a `.stamped` word in the margin in the severity's own ink, the
+  way a clerk marks priority beside an entry. Giving it a stamp would make the
+  one bold mark on a card stop meaning one thing.
+- **The dispatch register is one line per condition.** A restatement bumps the
+  `×n` tally in the margin; a cleared condition is ruled off with a
+  strikethrough. That mark is the data model made visible, and it is why the
+  API reads `notifications` one channel at a time — every subscribed channel
+  has its own row per condition, so an unfiltered register shows everything
+  twice.
 - **The lease term rule is the one drawn thing in the application** and it
   stays that way. It draws only what the dates say: a month-to-month lease gets
   no end tick, because inventing one asserts a fact the record does not hold.
@@ -261,7 +307,7 @@ Standard library `testing`, table-driven where there is more than one case. No
 assertion library. Store tests open a real SQLite file under `t.TempDir()`;
 `httpapi` tests substitute the small `Health` interface rather than a database.
 
-## Known gaps at M3
+## Known gaps at M3.5
 
 - **`audit_log` is still not written.** §8.5 implies web mutations are audited,
   but the table is in no migration and §11 assigns it to no milestone.
@@ -289,9 +335,11 @@ assertion library. Store tests open a real SQLite file under `t.TempDir()`;
   replies in-thread once ingestion resolves, which needs M4's proposal to have
   resolved into something. Asking for the scope now means the operator consents
   once instead of being sent back through a consent screen by an upgrade.
-- **The job queue has no dead-letter handling beyond the row.** A job past
-  `max_attempts` is `failed` and stays there; nothing retries it and nothing
-  alerts. M3.5's alert bus is what gives that a voice.
+- **A dead-lettered job now alerts but still nothing retries it.** A job past
+  `max_attempts` is `failed`, the row stays as the record, and
+  `RunnerOptions.OnDeadLetter` gives it a voice. Requeueing one is still a
+  manual `UPDATE`; a re-run button belongs with a screen that lists the queue,
+  and nothing lists the queue yet.
 - **Nothing prunes the raw `.eml` archive.** §12's first open question — keep
   forever or prune after N years — is still open, and the year/month directory
   layout is what makes either answer cheap.
@@ -301,12 +349,23 @@ assertion library. Store tests open a real SQLite file under `t.TempDir()`;
 - **Rate-limiter state is in memory** and does not survive a restart.
   Persisting it would put a write on every failed sign-in.
 - **TOTP is still deferred.** The `users.totp_secret` column carries no rows.
+- **`telegram_state.muted_until` is written by nothing.** `/mute` is an inbound
+  command and inbound commands are M6's. The column, the suppression in the
+  sender, and the MUTED stamp all exist and are tested; there is no way to set
+  it yet, which is the right order — the thing that reads a state should exist
+  before the thing that writes it.
+- **The `alerts` table from §3.2 is not in any migration.** All five of its
+  kinds are business alerts M6 computes. `notifications` is the delivery log
+  and is unrelated to it.
+- **Nothing prunes `notifications` or the alert spool.** The spool is bounded at
+  200 files; the table is not bounded at all. It grows one row per condition
+  per channel, which is slow, but it is unbounded.
 - Migrations land only the tables a milestone touches. The rest of
   `docs/DESIGN.md` §3 arrives milestone by milestone.
 - Property detail has five of §7.2's eight tabs. Insurance, Mortgage, and Value
   arrive with the milestones that fill them. §7.2's Settings screen is now the
-  Intake screen for its Gmail half; Telegram, provider health, and backup status
-  join it at M3.5, M5, and M7.
+  Intake screen for its Gmail half and its Telegram half; provider health and
+  backup status join it at M5 and M7.
 - **List pagination works but nothing pages yet** — every index fetches one
-  page and the frontend ignores `next_cursor`. It matters past 50 properties,
-  or a property with a long ledger.
+  page and the frontend ignores `next_cursor`, the dispatch register included.
+  It matters past 50 properties, or a property with a long ledger.

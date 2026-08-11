@@ -1,6 +1,6 @@
 # rental-bot — Design Document
 
-Status: draft · Last updated: 2026-08-08 · Implemented through M3
+Status: draft · Last updated: 2026-08-09 · Implemented through M3.5
 
 ---
 
@@ -174,9 +174,23 @@ email_messages ──── email_attachments ──► documents
   stringly-typed `kv` rows, and disconnecting becomes one `DELETE` rather than a
   list of keys somebody has to remember. `telegram_state` has the same shape for
   the same reason.
-- `alerts` — derived rows, recomputed by the scheduler: `kind` (`lease_expiring|policy_expiring|repair_stale|valuation_stale|proposal_pending`), `entity_type`, `entity_id`, `severity`, `due_on`, `resolved_at`.
+- `alerts` — derived rows, recomputed by the scheduler: `kind` (`lease_expiring|policy_expiring|repair_stale|valuation_stale|proposal_pending`), `entity_type`, `entity_id`, `severity`, `due_on`, `resolved_at`. **Deferred to M6.** Every one of those kinds is a business alert M6 computes; M3.5 landed the alerting subsystem without this table, because a migration that creates a table nothing writes creates a table nobody maintains.
 - `notifications` — outbound delivery log: `dedupe_key`, `channel`, `severity`, `title`, `first_seen_at`, `last_sent_at`, `send_count`, `resolved_at`. This table is what makes a flapping condition send once and then stay quiet.
-- `telegram_state` — single row: `chat_id` (authorized user), `last_update_id` (long-poll cursor), `muted_until`, `paired_at`.
+
+  One open row per `(dedupe_key, channel)`, as a partial unique index over
+  `resolved_at IS NULL` — a key has to be reusable once the condition it named
+  has cleared, which SQLite cannot spell as a column constraint. Every
+  subscribed channel gets its own row per condition, because each has its own
+  cooldown and its own delivery; a screen therefore reads one channel at a
+  time, or it shows every condition twice.
+- `telegram_state` — single row: `chat_id` (authorized user), `last_update_id` (long-poll cursor), `muted_until`, `paired_at`, plus `pairing_code_hash` and `pairing_expires_at` (§8.2), `last_sent_at`, `last_error`, and `status` (`unpaired|paired|degraded`).
+
+  Only the SHA-256 of a pairing code is stored, the discipline
+  `sessions.token_hash` follows: the moment the code is issued is the only
+  moment it is readable. The guard that makes it single-use lives in the
+  `UPDATE` — matching hash, unexpired, chat unset, all evaluated by the
+  statement that clears them — because a read-then-write would let two updates
+  arriving together both pass the read.
 - `audit_log` — `user_id`, `actor` (`web|telegram|system`), `at`, `action`, `entity_type`, `entity_id`, `before` (JSON), `after` (JSON).
 - `jobs` — `kind`, `payload`, `run_after`, `attempts`, `max_attempts`, `locked_at`, `locked_by`, `last_error`, `status`.
 - `kv` — small singleton state that has no table of its own. The Gmail cursor
@@ -340,6 +354,18 @@ The long-poll cursor (`last_update_id`) is persisted, so a restart neither repla
 A single `chat_id` in `telegram_state` is the entire authorization model.
 
 - **Pairing is one-time.** On first run with no `chat_id`, the process logs a short-lived random pairing code. The operator sends `/start <code>`; the originating `chat.ID` is persisted. The code expires in 10 minutes and is single-use.
+
+  **As built, the code is also shown on the Intake screen**, behind the session,
+  so pairing does not require SSH into the host on a first deploy. That is a
+  deliberate widening of this paragraph and it stops where §8.2 does:
+  *issuing* a code is refused once a chat is paired, so the web can finish a
+  setup nobody has finished and can never move an existing pairing. Re-pairing
+  is still `-unpair-telegram` and nothing else — a hijacked session is a lower
+  bar than a shell, and the alert channel is the thing that would report the
+  hijack.
+
+  A refused attempt says one thing for wrong, used, and expired. Telling a
+  prober which of the three it got is telling it how to get closer.
 - **Every update is checked** — messages *and* callback queries — against the stored `chat_id`, and dropped otherwise. Bot usernames get discovered and probed, so unauthorized updates are counted and logged at a throttled rate rather than one line per probe.
 - **Re-pairing requires server access** — a CLI flag that clears the stored chat — never a chat command. Nothing reachable from Telegram can change who Telegram trusts.
 
@@ -356,6 +382,27 @@ An internal alert bus, `alert.Publish(ctx, Alert{Key, Severity, Title, Detail})`
 | Business | New proposal awaiting review; lease expiring; policy expiring |
 
 **Deduplication and cooldown are mandatory, not polish.** Each alert carries a stable `Key`; the sender consults `notifications` to enforce a per-key cooldown (default 6h, overridable per severity) and emits an explicit recovery message when the condition clears. `/mute 4h` sets `muted_until` and suppresses everything below `critical`. An alert channel noisy enough to be muted is worse than no channel at all.
+
+As built, the cooldown lives in the bus rather than in the sender, so it
+applies to every channel rather than to Telegram alone; and a **`Key` names the
+condition, not the occurrence**, which is the whole thing this rests on. A job
+kind that keeps failing is one key, not one per job id. A route that keeps
+panicking is one key, not one per request. Getting that wrong turns the
+cooldown off without appearing to.
+
+The two halves of the mechanism split by how a condition is noticed. Something
+with a moment of its own — a job out of attempts, a recovered panic —
+publishes directly. Something with no moment — a watch that lapsed while the
+process was down, a queue that stopped draining — is read by a `Probe` on a
+scheduled sweep. A probe reports its condition in both directions, true and
+cleared, and the bus decides what is worth saying: only the sweep that finds an
+open row owes anybody a recovery message. A probe that remembers nothing cannot
+get out of step with the record after a restart.
+
+A **log sink is subscribed always**, including where no bot is configured. The
+register then has content before anybody pairs — the operator can see what
+*would* have been sent and judge whether the channel is worth setting up — and
+a condition raised on an unpaired host is on file rather than lost.
 
 ### 8.4 Delivery reliability has two paths
 
@@ -404,7 +451,16 @@ The bot token is encrypted at rest alongside the Gmail refresh token. Alert bodi
 
 ### 9.2 Security
 
-- **Field-level AES-GCM encryption** for loan numbers, policy numbers, the Gmail refresh token, the Telegram bot token, and scraper cookies. Key from an env var or a `0600` key file, never from the database.
+- **Field-level AES-GCM encryption** for loan numbers, policy numbers, the Gmail refresh token, and scraper cookies. Key from an env var or a `0600` key file, never from the database.
+
+  **The Telegram bot token is not among them, as built.** It comes from
+  `RENTAL_BOT_TELEGRAM_BOT_TOKEN` and no column holds it. The Gmail *refresh*
+  token is encrypted in the database because OAuth produces it at runtime and
+  there is nowhere else for it to live; a bot token is a static credential the
+  operator configures once, which makes it the same kind of thing as the Gmail
+  *client secret* — already env-only for exactly this reason. Encrypting a
+  value that arrives from the environment on every boot would protect a copy of
+  the database against a secret the database never had.
 - **Blob directory `0700`**, served only through the authenticated handler — never mapped by the reverse proxy. A document URL without a session is a 401, not a file.
 - Passwords argon2id; sessions server-side and revocable; CSRF on mutations; login rate limiting.
 - Untrusted-input boundaries documented at three places: forwarded email content (§5.3), Pub/Sub payloads (§4.2), and Telegram updates (§8.2).

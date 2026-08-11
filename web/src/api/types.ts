@@ -488,3 +488,70 @@ export interface EmailMessagePage {
 export interface ConnectResponse {
   authorize_url: string;
 }
+
+/* The alert channel ------------------------------------------------------ */
+
+export type ChannelState =
+  | "paired"
+  | "muted"
+  | "no-contact"
+  | "not-connected"
+  | "not-configured";
+
+export type Severity = "info" | "warning" | "critical";
+
+export interface ChannelStanding {
+  configured: boolean;
+  paired: boolean;
+  state: ChannelState;
+  /** Where the operator sends /start, without the @. */
+  bot_username?: string;
+  chat_id?: number;
+  paired_at?: string;
+  muted_until?: string;
+  last_sent_at?: string;
+  last_error?: string;
+  /**
+   * When the outstanding pairing code lapses. The code itself is never here:
+   * only its hash is stored, so the response to issuing one is the only place
+   * it ever appears.
+   */
+  pairing_expires_at?: string;
+  /** How long a condition stays quiet after being stated. */
+  cooldown_seconds: number;
+  /** The configuration keys that are not set, when the channel is off. */
+  missing?: string[];
+  sent: number;
+  cleared: number;
+  checked_at: string;
+}
+
+export interface PairingCode {
+  code: string;
+  expires_at: string;
+  /** The exact line to send, so the operator copies rather than assembles it. */
+  send: string;
+  bot_username: string;
+}
+
+/** One line of the dispatch register. */
+export interface Notice {
+  id: number;
+  dedupe_key: string;
+  channel: string;
+  severity: Severity;
+  title: string;
+  detail?: string;
+  /** When the condition was first recorded, not when it was last restated. */
+  first_seen_at: string;
+  last_sent_at?: string;
+  /** How many times this one condition has gone out. */
+  send_count: number;
+  /** Set once the condition cleared, which is what rules the line off. */
+  resolved_at?: string;
+}
+
+export interface NoticePage {
+  items: Notice[];
+  next_cursor?: string;
+}

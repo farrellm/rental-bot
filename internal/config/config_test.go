@@ -276,6 +276,96 @@ func TestGmailRejectsHalfAConfiguration(t *testing.T) {
 	}
 }
 
+// A fresh clone has no bot and has to run anyway.
+func TestTelegramIsOffWhenUnconfigured(t *testing.T) {
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Telegram.Enabled() {
+		t.Error("Telegram.Enabled() is true with no bot_username")
+	}
+}
+
+func TestTelegramReadsFileAndEnv(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	write(t, path, `
+[telegram]
+bot_username = "rental_records_bot"
+cooldown = "12h"
+sweep_interval = "10m"
+`)
+
+	t.Setenv(envPrefix+"TELEGRAM_BOT_TOKEN", "123:abc")
+	t.Setenv(envPrefix+"TELEGRAM_SWEEP_INTERVAL", "2m")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if !cfg.Telegram.Enabled() {
+		t.Fatal("Telegram.Enabled() is false with a bot_username set")
+	}
+	if got, want := cfg.Telegram.SweepInterval.Duration, 2*time.Minute; got != want {
+		t.Errorf("SweepInterval = %s, want %s (env wins over file)", got, want)
+	}
+	if got, want := cfg.Telegram.Cooldown.Duration, 12*time.Hour; got != want {
+		t.Errorf("Cooldown = %s, want %s (from the file)", got, want)
+	}
+	if got, want := cfg.Telegram.CriticalCooldown.Duration, Default().Telegram.CriticalCooldown.Duration; got != want {
+		t.Errorf("CriticalCooldown = %s, want the default %s", got, want)
+	}
+	if cfg.Secrets.TelegramBotToken != "123:abc" {
+		t.Errorf("TelegramBotToken = %q, want it from the environment", cfg.Secrets.TelegramBotToken)
+	}
+}
+
+// Half-configured alerting has to fail at startup. The first outage is the
+// worst possible moment to find out the channel was never going to work.
+func TestTelegramRejectsHalfAConfiguration(t *testing.T) {
+	const username = "rental_records_bot"
+
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{"no bot token", map[string]string{
+			"TELEGRAM_BOT_USERNAME": username,
+		}},
+		{"username pasted with its @", map[string]string{
+			"TELEGRAM_BOT_USERNAME": "@" + username, "TELEGRAM_BOT_TOKEN": "t",
+		}},
+		{"critical restated less often than ordinary", map[string]string{
+			"TELEGRAM_BOT_USERNAME": username, "TELEGRAM_BOT_TOKEN": "t",
+			"TELEGRAM_COOLDOWN": "1h", "TELEGRAM_CRITICAL_COOLDOWN": "6h",
+		}},
+		{"long poll past Telegram's 50s ceiling", map[string]string{
+			"TELEGRAM_BOT_USERNAME": username, "TELEGRAM_BOT_TOKEN": "t",
+			"TELEGRAM_POLL_INTERVAL": "90s",
+		}},
+		{"negative backlog threshold", map[string]string{
+			"TELEGRAM_BOT_USERNAME": username, "TELEGRAM_BOT_TOKEN": "t",
+			"TELEGRAM_QUEUE_BACKLOG_THRESHOLD": "-1",
+		}},
+		{"nowhere for a critical alert to wait", map[string]string{
+			"TELEGRAM_BOT_USERNAME": username, "TELEGRAM_BOT_TOKEN": "t",
+			"STORAGE_SPOOL": "",
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range tt.env {
+				t.Setenv(envPrefix+k, v)
+			}
+			if _, err := Load(""); err == nil {
+				t.Fatal("Load succeeded, want an error")
+			}
+		})
+	}
+}
+
 func write(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {

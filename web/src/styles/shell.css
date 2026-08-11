@@ -151,6 +151,19 @@
   align-items: start;
 }
 
+/* Two record cards laid out one under the other.
+ *
+ * Not .stack: that is the index grid, which puts cards side by side and would
+ * set the mail room and the notice channel next to each other in two narrow
+ * columns. These are full records and they read down the page. */
+.desk {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap);
+  width: 100%;
+}
+
 /* An empty drawer states what it holds and invites the first entry. */
 .empty {
   max-width: var(--card-width-slip);

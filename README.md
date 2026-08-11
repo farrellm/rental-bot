@@ -14,19 +14,26 @@ plan.
 
 ## Status
 
-**M3** — Gmail watch, webhook, fallback poller, raw archive. Connect a mailbox
-and forwarded mail files itself: the message is archived as a raw `.eml`,
-recorded in the register, and its attachments land in the document store. The
-Intake screen says whether mail is still arriving.
+**M3.5** — the alert bus and the Telegram channel, outbound only. The
+application now tells you when it has stopped working: a revoked grant, a
+lapsed watch, a job that gave up, a queue that stopped draining, a handler that
+panicked. A condition is said once and then goes quiet until it clears, and the
+Intake screen keeps the register of what went out.
 
-Everything before it still holds. You can sign in, put properties on file with
-their units, file documents against them, keep a cash-flow ledger, run repairs
-with a dated history, and record leases and tenants; occupancy is derived from
-the lease dates rather than stored.
+**M3** before it — Gmail watch, webhook, fallback poller, raw archive. Connect
+a mailbox and forwarded mail files itself: the message is archived as a raw
+`.eml`, recorded in the register, and its attachments land in the document
+store. The Intake screen says whether mail is still arriving.
 
-M3 stops at the door of the LLM. Nothing is classified, extracted, or proposed
-— that gate is M4's, and forwarded email is untrusted input that should reach a
-model with no capability to act on it.
+Everything before that still holds. You can sign in, put properties on file
+with their units, file documents against them, keep a cash-flow ledger, run
+repairs with a dated history, and record leases and tenants; occupancy is
+derived from the lease dates rather than stored.
+
+This stops at the door of the LLM. Nothing is classified, extracted, or
+proposed — that gate is M4's, and forwarded email is untrusted input that
+should reach a model with no capability to act on it. The chat is one-way for
+now: it can pair, and after that it only sends. Commands are M6's.
 
 ## Requirements
 
@@ -84,6 +91,11 @@ prompts twice with the echo off, or reads `RENTAL_BOT_ADMIN_PASSWORD` when
 stdin is not a terminal. Passwords are at least twelve characters: this is
 designed to be reachable from the internet and TOTP is still deferred, so the
 password is the only thing between a stranger and the ledger.
+
+`./bin/rental-bot -unpair-telegram` forgets the paired chat, and it is the only
+way to change who the alert channel trusts. Nothing reachable from Telegram can
+do it, and neither can the web API — a hijacked session is a lower bar than a
+shell, and the channel is what would report the hijack.
 
 Version, commit, and build date are stamped in through `-ldflags`, so
 `./bin/rental-bot -version` and the status card report the real build rather
@@ -164,10 +176,18 @@ Secrets are never read from the config file:
 | `RENTAL_BOT_SECRET_KEY` | The AES-GCM key protecting encrypted columns. |
 | `RENTAL_BOT_SECRET_KEY_FILE` | A path to that key. The file must be mode `0600`. |
 | `RENTAL_BOT_GMAIL_CLIENT_SECRET` | The OAuth client secret. |
+| `RENTAL_BOT_TELEGRAM_BOT_TOKEN` | The bot token from @BotFather. |
 
 The encryption key becomes **required** once `gmail.client_id` is set: the Gmail
 refresh token is stored encrypted, so a database copy without the key does not
 hand over the mailbox.
+
+The bot token is not stored anywhere. It is a static credential the operator
+configures once, like the OAuth client secret above — unlike the Gmail refresh
+token, which OAuth produces at runtime and which has nowhere to live but the
+database. A leaked bot token grants the ability to send *as* the bot, not to
+command it: authorization is the stored `chat_id`, and re-pairing needs a shell
+on the host.
 
 ## Email ingestion
 
@@ -207,6 +227,49 @@ a row in the register, and each attachment in the content-addressed document
 store. Attachments are filed against no property — matching an address to a
 property is deterministic Go over an extracted string, and the extraction that
 produces that string is M4's.
+
+## Alerts
+
+The application is now able to fail silently — a watch lapses, a grant is
+revoked, a job runs out of attempts — so it tells you when it has stopped
+working.
+
+A blank `telegram.bot_username` is the off switch, the same way a blank
+`gmail.client_id` is. Everything still runs: conditions are recorded and
+readable on the Intake screen's dispatch register, with no channel to send
+them on. Turning it on takes two things:
+
+1. **A bot**, from [@BotFather](https://t.me/BotFather). Its `@name` goes in
+   `telegram.bot_username` without the `@`; its token goes in
+   `RENTAL_BOT_TELEGRAM_BOT_TOKEN`.
+2. **A pairing.** Sign in, open **Intake**, press *Get a pairing code*, and
+   send the line it gives you to the bot. The code is single-use and lapses
+   after `telegram.pairing_ttl`. If the web app is not reachable yet, the
+   process logs a code at startup instead.
+
+That single `chat_id` is the entire authorization model. Every update is
+checked against it and dropped otherwise, and `-unpair-telegram` on the host is
+the only way to change it.
+
+**A condition is stated once and then goes quiet.** Each alert carries a stable
+key; the second report of the same condition inside `telegram.cooldown` bumps a
+tally rather than sending a second message, and an explicit message goes out
+when the condition clears. An alert channel noisy enough to be muted is worse
+than no channel at all.
+
+**Critical alerts do not ride the job queue**, because the queue is one of the
+things they report on. They take a direct path with bounded retry and a disk
+spool under `storage.spool`, so a network blip delays delivery rather than
+losing it. Routine alerts go through the queue and inherit its retries.
+
+Long polling, not a webhook — deliberately. The process already terminates
+public HTTPS for the Pub/Sub push, so a webhook would be nearly free, but the
+alerting channel must not share a failure domain with the thing it reports on.
+If TLS expires or the reverse proxy dies, a webhook-based bot goes silent at
+exactly the moment it is needed.
+
+Inbound commands are M6's. The only update this build acts on is the `/start`
+that pairs a chat.
 
 ## Endpoints
 
@@ -263,6 +326,15 @@ Email ingestion:
 | `POST /api/v1/gmail/sync` | Queues a sync now. `queued: false` means one was already waiting. |
 | `GET /api/v1/email-messages`, `GET /api/v1/email-messages/{id}` | The register, newest first, with attachments inline. |
 | `GET /api/v1/email-messages/{id}/raw` | The archived `.eml`, always as an attachment. |
+
+Alerts and the Telegram channel:
+
+| Path | Purpose |
+| --- | --- |
+| `GET /api/v1/telegram` | The channel's standing: configured, paired, muted, when it last delivered, and the register's tally. |
+| `POST /api/v1/telegram/pairing-code` | Issues a single-use code, shown once. `409` once a chat is paired — re-pairing needs server access. |
+| `POST /api/v1/telegram/test` | Sends one notice, so the channel can be proved working before something goes wrong. |
+| `GET /api/v1/notifications` | The dispatch register: what went out, when, and how many times. Works with no bot configured, because everything is recorded against the log channel too. |
 
 Money on the wire is a signed integer count of cents. On a ledger entry the
 sign is the whole distinction: income positive, expense negative. A repair
