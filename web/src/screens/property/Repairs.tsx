@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useParams } from "react-router";
 
 import {
   describeError,
@@ -25,6 +24,7 @@ import {
   timestamp,
   today,
 } from "../../format";
+import { usePropertyId } from "./usePropertyId";
 
 const STATUSES: RepairStatus[] = ["open", "scheduled", "in_progress", "done", "wontfix"];
 
@@ -54,8 +54,7 @@ const STATUS_LABEL: Record<RepairStatus, string> = {
  * the order carries information the reader needs.
  */
 export function Repairs() {
-  const params = useParams();
-  const propertyId = Number(params.id ?? 0);
+  const propertyId = usePropertyId();
 
   const repairs = useRepairs(propertyId);
   const createRepair = useCreateRepair(propertyId);

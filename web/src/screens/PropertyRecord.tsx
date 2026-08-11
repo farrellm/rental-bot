@@ -6,6 +6,21 @@ import { fileNumber, oneLineAddress } from "../format";
 import { Overview } from "./property/Overview";
 
 /**
+ * The divider tabs, in the order they are cut.
+ *
+ * The empty path is Overview, which is the record's index route. §7.2 of the
+ * design has three more — Insurance, Mortgage, Value — arriving with the
+ * milestones that fill them; they are a row in this list when they do.
+ */
+const SECTIONS: { path: string; label: string }[] = [
+  { path: "", label: "Overview" },
+  { path: "cash-flow", label: "Cash flow" },
+  { path: "repairs", label: "Repairs" },
+  { path: "leases", label: "Leases" },
+  { path: "documents", label: "Documents" },
+];
+
+/**
  * One property record, with its divider tabs.
  *
  * The head band and the tabs belong to the record; each section fills the
@@ -86,21 +101,16 @@ export function PropertyRecord({ isNew = false }: { isNew?: boolean }) {
       <div className="record">
         {!isNew && (
           <nav className="tabs" aria-label="Sections of this record" ref={tabs}>
-            <NavLink to={`/properties/${id}`} end className={tabClass}>
-              Overview
-            </NavLink>
-            <NavLink to={`/properties/${id}/cash-flow`} className={tabClass}>
-              Cash flow
-            </NavLink>
-            <NavLink to={`/properties/${id}/repairs`} className={tabClass}>
-              Repairs
-            </NavLink>
-            <NavLink to={`/properties/${id}/leases`} className={tabClass}>
-              Leases
-            </NavLink>
-            <NavLink to={`/properties/${id}/documents`} className={tabClass}>
-              Documents
-            </NavLink>
+            {SECTIONS.map(({ path, label }) => (
+              <NavLink
+                key={label}
+                to={path ? `/properties/${id}/${path}` : `/properties/${id}`}
+                end={path === ""}
+                className={tabClass}
+              >
+                {label}
+              </NavLink>
+            ))}
           </nav>
         )}
 

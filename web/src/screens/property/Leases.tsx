@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useParams } from "react-router";
 
 import {
   describeError,
@@ -20,6 +19,7 @@ import { SheetField, SheetFilter } from "../../components/SheetField";
 import { SheetForm } from "../../components/SheetForm";
 import { Stamp, type StampState } from "../../components/Stamp";
 import { calendarDate, DASH, isCalendarDate, money, parseMoney, today } from "../../format";
+import { usePropertyId } from "./usePropertyId";
 import { TermRule } from "./TermRule";
 
 const STATUSES: LeaseStatus[] = ["pending", "active", "ended", "terminated"];
@@ -32,6 +32,22 @@ const STATUS_LABEL: Record<LeaseStatus, string> = {
 };
 
 /**
+ * The stamp says these words.
+ *
+ * Written out rather than cast, the way Repairs, Intake and Dispatch all write
+ * theirs out. The two vocabularies happen to coincide today, so a cast
+ * compiled -- and would go on compiling on the day a fifth lease status
+ * arrives without a word to stamp on it. `active` is shared with a property's
+ * standing on purpose: a let unit and a held property are the same idea.
+ */
+const STATUS_STAMP: Record<LeaseStatus, StampState> = {
+  pending: "pending",
+  active: "active",
+  ended: "ended",
+  terminated: "terminated",
+};
+
+/**
  * The lease abstracts.
  *
  * Not the lease itself — that is a PDF in Documents — but the one-page summary
@@ -40,8 +56,7 @@ const STATUS_LABEL: Record<LeaseStatus, string> = {
  * characteristic fact is that it runs out, and a date does not say how soon.
  */
 export function Leases() {
-  const params = useParams();
-  const propertyId = Number(params.id ?? 0);
+  const propertyId = usePropertyId();
 
   const leases = useLeases(propertyId);
   const property = useProperty(propertyId);
@@ -138,7 +153,7 @@ function Abstract({ lease, propertyId, onError }: AbstractProps) {
             <span className="abstract__per stamped"> a month</span>
           </p>
         </div>
-        <Stamp state={lease.status as StampState} small />
+        <Stamp state={STATUS_STAMP[lease.status]} small />
       </header>
 
       <TermRule start={lease.start_date} end={lease.end_date} status={lease.status} />

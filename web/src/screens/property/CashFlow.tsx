@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useParams } from "react-router";
 
 import {
   describeError,
@@ -13,6 +12,7 @@ import { Select } from "../../components/Select";
 import { SheetField, SheetFilter } from "../../components/SheetField";
 import { SheetForm } from "../../components/SheetForm";
 import { calendarDate, DASH, isCalendarDate, money, parseMoney, today } from "../../format";
+import { usePropertyId } from "./usePropertyId";
 
 /** The categories, in the order the ledger's own CHECK lists them. */
 const CATEGORIES: TransactionCategory[] = [
@@ -82,8 +82,7 @@ const RANGE_LABEL: Record<Range, string> = {
  * figure allowed to raise its voice, and only when it is negative.
  */
 export function CashFlow() {
-  const params = useParams();
-  const propertyId = Number(params.id ?? 0);
+  const propertyId = usePropertyId();
 
   const [range, setRange] = useState<Range>("year");
   const [category, setCategory] = useState<TransactionCategory | "">("");

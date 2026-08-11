@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { useParams } from "react-router";
 
 import {
   describeError,
@@ -12,6 +11,7 @@ import {
 import { Select } from "../../components/Select";
 import { SheetFilter } from "../../components/SheetField";
 import { bytes, timestamp } from "../../format";
+import { usePropertyId } from "./usePropertyId";
 
 const KINDS: DocumentKind[] = [
   "lease",
@@ -45,8 +45,7 @@ const KIND_LABEL: Record<DocumentKind, string> = {
  * forwarding the same receipt twice files it once.
  */
 export function Documents() {
-  const params = useParams();
-  const propertyId = Number(params.id ?? 0);
+  const propertyId = usePropertyId();
 
   const documents = useDocuments(propertyId);
   const remove = useDeleteDocument(propertyId);

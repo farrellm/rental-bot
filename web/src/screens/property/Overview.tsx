@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router";
 
 import {
   describeError,
@@ -10,14 +10,13 @@ import {
   useProperty,
   useUpdateProperty,
   useUpdateUnit,
-  type PropertyStatus,
-  type Unit,
+  type PropertyDetail,
 } from "../../api";
-import { AmendableRow } from "../../components/FieldRow";
 import { Stamp } from "../../components/Stamp";
-import { calendarDate, DASH, orDashNumber } from "../../format";
+import { PropertyFields } from "./PropertyFields";
+import { UnitsEditor } from "./UnitsEditor";
+import { usePropertyId } from "./usePropertyId";
 import {
-  blankUnitDraft,
   emptyDraft,
   toDraft,
   toPropertyWrite,
@@ -28,8 +27,6 @@ import {
   type DraftProblem,
   type UnitDraft,
 } from "./draft";
-
-const STATUSES: PropertyStatus[] = ["active", "sold", "prospect"];
 
 /**
  * The Overview section: the property's own entries, amended in place.
@@ -43,10 +40,12 @@ const STATUSES: PropertyStatus[] = ["active", "sold", "prospect"];
  * PropertyRecord, which is the folder these sections live in.
  */
 export function Overview({ isNew = false }: { isNew?: boolean }) {
-  const params = useParams();
   const navigate = useNavigate();
 
-  const id = isNew ? 0 : Number(params.id ?? 0);
+  // A property that does not exist yet has no id, and every query below is
+  // guarded on it being one.
+  const routeId = usePropertyId();
+  const id = isNew ? 0 : routeId;
 
   const property = useProperty(id);
   const createProperty = useCreateProperty();
@@ -69,30 +68,25 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
   // Seed the draft from the record whenever a fresh one arrives, unless the
   // operator is part way through amending it — overwriting what they have
   // typed because a refetch landed would be its own kind of data loss.
-  // Seeding state from a query result is a cascading render, and the rule is
-  // right about it. Rewritten to React's render-phase idiom in a later commit;
-  // doing it here would mix a behaviour change into a tooling one.
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (!property.data || editing) return;
+  //
+  // Adjusted during render rather than in an effect. React documents this as
+  // the way to reset state when a prop changes, and it is the better one here:
+  // an effect paints the stale draft first and replaces it on the next frame,
+  // so a refetch landing while the card was closed showed the old values for
+  // a beat. This re-renders before anything reaches the screen.
+  const [seeded, setSeeded] = useState<PropertyDetail | null>(null);
+  if (property.data && !editing && property.data !== seeded) {
+    setSeeded(property.data);
     setDraft(toDraft(property.data));
     setOriginal(toDraft(property.data));
     setUnits(toUnitDrafts(property.data.units));
     setOriginalUnits(toUnitDrafts(property.data.units));
-  }, [property.data, editing]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  }
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
 
-  const setUnit = (key: string, patch: Partial<UnitDraft>) =>
-    setUnits((current) => current.map((u) => (u.key === key ? { ...u, ...patch } : u)));
-
   const live = units.filter((u) => !u.removed);
-
-  // Occupancy comes off the record rather than the draft: it is derived from
-  // the lease dates by the server and is not something this card edits.
-  const unitsById = new Map<number, Unit>((property.data?.units ?? []).map((u) => [u.id, u]));
 
   function startAmending() {
     setProblems([]);
@@ -138,7 +132,7 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
         });
         // Close the card before navigating. This route does not remount when
         // the id changes, so leaving it open would strand the new record in
-        // amend mode — and an open card blocks the effect that would seed it
+        // amend mode — and an open card blocks the seeding that would fill it
         // with what the server actually stored, including the implicit unit.
         setEditing(false);
         void navigate(`/properties/${created.id}`, { replace: true });
@@ -194,329 +188,23 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
         </p>
       )}
 
-      <dl className="card__fields">
-        <AmendableRow
-          label="Nickname"
-          editing={editing}
-          value={draft.nickname || DASH}
-          htmlFor="nickname"
-        >
-          <input
-            id="nickname"
-            className={entryClass(problemFor("nickname"))}
-            value={draft.nickname}
-            onChange={(e) => set("nickname", e.target.value)}
-            autoComplete="off"
-          />
-        </AmendableRow>
+      <PropertyFields
+        draft={draft}
+        set={set}
+        editing={editing}
+        isNew={isNew}
+        normalizedAddress={property.data?.normalized_address ?? ""}
+        problemFor={problemFor}
+      />
 
-        <AmendableRow
-          label="Address"
-          editing={editing}
-          value={draft.address_line1 || DASH}
-          htmlFor="address_line1"
-        >
-          <input
-            id="address_line1"
-            className="entry"
-            value={draft.address_line1}
-            onChange={(e) => set("address_line1", e.target.value)}
-            autoComplete="off"
-          />
-        </AmendableRow>
-
-        <AmendableRow
-          label="Line 2"
-          editing={editing}
-          value={draft.address_line2 || DASH}
-          htmlFor="address_line2"
-        >
-          <input
-            id="address_line2"
-            className="entry"
-            value={draft.address_line2}
-            onChange={(e) => set("address_line2", e.target.value)}
-            autoComplete="off"
-          />
-        </AmendableRow>
-
-        <AmendableRow
-          label="City / State / ZIP"
-          editing={editing}
-          value={[draft.city, draft.state, draft.postal_code].filter(Boolean).join(" ") || DASH}
-          htmlFor="city"
-        >
-          <div className="entry-group">
-            <input
-              id="city"
-              className="entry"
-              value={draft.city}
-              onChange={(e) => set("city", e.target.value)}
-              aria-label="City"
-              placeholder="City"
-              autoComplete="off"
-            />
-            <input
-              className="entry"
-              value={draft.state}
-              onChange={(e) => set("state", e.target.value)}
-              aria-label="State"
-              placeholder="State"
-              autoComplete="off"
-            />
-            <input
-              className="entry"
-              value={draft.postal_code}
-              onChange={(e) => set("postal_code", e.target.value)}
-              aria-label="Postal code"
-              placeholder="ZIP"
-              inputMode="numeric"
-              autoComplete="off"
-            />
-          </div>
-        </AmendableRow>
-
-        <AmendableRow
-          label="County"
-          editing={editing}
-          value={draft.county || DASH}
-          htmlFor="county"
-        >
-          <input
-            id="county"
-            className="entry"
-            value={draft.county}
-            onChange={(e) => set("county", e.target.value)}
-            autoComplete="off"
-          />
-        </AmendableRow>
-
-        {/* Not a Select: these options label themselves with the wire value,
-            the way the closed card reads it back. Giving them written-out
-            words would change what the record says. */}
-        <AmendableRow label="Status" editing={editing} value={draft.status} htmlFor="status">
-          <select
-            id="status"
-            className="entry entry--short"
-            value={draft.status}
-            onChange={(e) => set("status", e.target.value as PropertyStatus)}
-          >
-            {STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-        </AmendableRow>
-
-        <AmendableRow
-          label="Purchased"
-          editing={editing}
-          value={calendarDate(draft.purchase_date || null)}
-          htmlFor="purchase_date"
-          hint={problemFor("purchase_date")}
-        >
-          <input
-            id="purchase_date"
-            className={entryClass(problemFor("purchase_date"))}
-            value={draft.purchase_date}
-            onChange={(e) => set("purchase_date", e.target.value)}
-            placeholder="YYYY-MM-DD"
-            inputMode="numeric"
-            autoComplete="off"
-          />
-        </AmendableRow>
-
-        <AmendableRow
-          label="Price"
-          editing={editing}
-          value={draft.purchase_price ? `$${draft.purchase_price}` : DASH}
-          htmlFor="purchase_price"
-          hint={problemFor("purchase_price")}
-        >
-          <input
-            id="purchase_price"
-            className={entryClass(problemFor("purchase_price"))}
-            value={draft.purchase_price}
-            onChange={(e) => set("purchase_price", e.target.value)}
-            placeholder="285000.00"
-            inputMode="decimal"
-            autoComplete="off"
-          />
-        </AmendableRow>
-
-        <AmendableRow
-          label="Beds / Baths"
-          editing={editing}
-          value={`${orDashNumber(numberOrNull(draft.beds))} / ${orDashNumber(numberOrNull(draft.baths))}`}
-          htmlFor="beds"
-          hint={problemFor("beds") ?? problemFor("baths")}
-        >
-          <div className="entry-group">
-            <input
-              id="beds"
-              className={entryClass(problemFor("beds"))}
-              value={draft.beds}
-              onChange={(e) => set("beds", e.target.value)}
-              aria-label="Beds"
-              inputMode="numeric"
-              placeholder="Beds"
-              autoComplete="off"
-            />
-            <input
-              className={entryClass(problemFor("baths"))}
-              value={draft.baths}
-              onChange={(e) => set("baths", e.target.value)}
-              aria-label="Baths"
-              inputMode="decimal"
-              placeholder="Baths"
-              autoComplete="off"
-            />
-          </div>
-        </AmendableRow>
-
-        <AmendableRow
-          label="Sq ft / Built"
-          editing={editing}
-          value={`${orDashNumber(numberOrNull(draft.sqft))} / ${orDashNumber(numberOrNull(draft.year_built))}`}
-          htmlFor="sqft"
-          hint={problemFor("sqft") ?? problemFor("year_built")}
-        >
-          <div className="entry-group">
-            <input
-              id="sqft"
-              className={entryClass(problemFor("sqft"))}
-              value={draft.sqft}
-              onChange={(e) => set("sqft", e.target.value)}
-              aria-label="Square feet"
-              inputMode="numeric"
-              placeholder="Sq ft"
-              autoComplete="off"
-            />
-            <input
-              className={entryClass(problemFor("year_built"))}
-              value={draft.year_built}
-              onChange={(e) => set("year_built", e.target.value)}
-              aria-label="Year built"
-              placeholder="Year"
-              inputMode="numeric"
-              autoComplete="off"
-            />
-          </div>
-        </AmendableRow>
-
-        <AmendableRow
-          label="Notes"
-          editing={editing}
-          value={draft.notes || DASH}
-          htmlFor="notes"
-          block
-        >
-          <textarea
-            id="notes"
-            className="entry"
-            value={draft.notes}
-            onChange={(e) => set("notes", e.target.value)}
-            rows={3}
-          />
-        </AmendableRow>
-
-        {!editing && !isNew && (
-          <AmendableRow
-            label="Match key"
-            editing={false}
-            value={property.data?.normalized_address || DASH}
-          >
-            <span />
-          </AmendableRow>
-        )}
-      </dl>
-
-      <section className="units">
-        <h2 className="units__eyebrow">Units</h2>
-
-        <div className="units__list">
-          {live.length === 0 && !editing && <p className="units__empty">No units on file.</p>}
-
-          {live.map((unit) =>
-            editing ? (
-              <div key={unit.key} className="unit unit--editing">
-                <div className="unit__entries">
-                  <input
-                    className={entryClass(problemFor(`unit-${unit.key}`))}
-                    value={unit.label}
-                    onChange={(e) => setUnit(unit.key, { label: e.target.value })}
-                    placeholder="Label"
-                    aria-label="Unit label"
-                    autoComplete="off"
-                  />
-                  <input
-                    className={entryClass(problemFor(`unit-${unit.key}-beds`))}
-                    value={unit.beds}
-                    onChange={(e) => setUnit(unit.key, { beds: e.target.value })}
-                    placeholder="Beds"
-                    aria-label="Beds"
-                    inputMode="numeric"
-                    autoComplete="off"
-                  />
-                  <input
-                    className={entryClass(problemFor(`unit-${unit.key}-baths`))}
-                    value={unit.baths}
-                    onChange={(e) => setUnit(unit.key, { baths: e.target.value })}
-                    placeholder="Baths"
-                    aria-label="Baths"
-                    inputMode="decimal"
-                    autoComplete="off"
-                  />
-                  <input
-                    className={entryClass(problemFor(`unit-${unit.key}-sqft`))}
-                    value={unit.sqft}
-                    onChange={(e) => setUnit(unit.key, { sqft: e.target.value })}
-                    placeholder="Sq ft"
-                    aria-label="Square feet"
-                    inputMode="numeric"
-                    autoComplete="off"
-                  />
-                </div>
-                <div className="unit__actions">
-                  <button
-                    type="button"
-                    className="button button--danger"
-                    onClick={() => setUnit(unit.key, { removed: true })}
-                    disabled={live.length === 1}
-                    title={live.length === 1 ? "A property keeps at least one unit." : undefined}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div key={unit.key} className="unit">
-                <span className="unit__label mono">{unit.label}</span>
-                <span className="unit__facts mono">{unitFacts(unit)}</span>
-                <span className={occupancyClass(unitsById.get(unit.id ?? 0))}>
-                  {occupancy(unitsById.get(unit.id ?? 0))}
-                </span>
-              </div>
-            ),
-          )}
-        </div>
-
-        {editing && (
-          <div className="units__add">
-            <button
-              type="button"
-              className="button"
-              onClick={() => setUnits((current) => [...current, blankUnitDraft()])}
-            >
-              Add unit
-            </button>
-            {isNew && live.length === 0 && (
-              <p className="hint">A property with no units listed gets one called Main.</p>
-            )}
-          </div>
-        )}
-      </section>
+      <UnitsEditor
+        units={units}
+        setUnits={setUnits}
+        editing={editing}
+        isNew={isNew}
+        onFile={property.data?.units ?? []}
+        problemFor={problemFor}
+      />
 
       <footer className="record__foot">
         <div className="actions">
@@ -578,43 +266,4 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
       </footer>
     </>
   );
-}
-
-function entryClass(problem: string | undefined): string {
-  return problem ? "entry entry--invalid" : "entry";
-}
-
-function numberOrNull(text: string): number | null {
-  const trimmed = text.trim();
-  if (trimmed === "") return null;
-  const value = Number(trimmed);
-  return Number.isFinite(value) ? value : null;
-}
-
-function unitFacts(unit: UnitDraft): string {
-  const parts = [
-    unit.beds ? `${unit.beds} bd` : null,
-    unit.baths ? `${unit.baths} ba` : null,
-    unit.sqft ? `${unit.sqft} sq ft` : null,
-  ].filter(Boolean);
-  return parts.length > 0 ? parts.join("  ") : DASH;
-}
-
-/**
- * What a unit's leases say about it today.
- *
- * Occupancy is derived, never stored: the server answers it from the lease
- * dates on every read. "Let" here means a lease covers today, and the date is
- * the day that stops being true.
- */
-function occupancy(unit: Unit | undefined): string {
-  if (!unit || unit.active_lease_id == null) return "Vacant";
-  return unit.active_lease_end_date
-    ? `Let to ${unit.active_lease_end_date}`
-    : "Let, month to month";
-}
-
-function occupancyClass(unit: Unit | undefined): string {
-  const let_ = unit != null && unit.active_lease_id != null;
-  return let_ ? "unit__standing mono unit__standing--let" : "unit__standing mono";
 }
