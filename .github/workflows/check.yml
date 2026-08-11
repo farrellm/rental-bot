@@ -1,0 +1,98 @@
+# CI runs `make check` — the same command CLAUDE.md says a commit has to pass.
+#
+# Running the make target rather than restating its steps here is deliberate.
+# If the two drifted, the one a person runs before committing and the one that
+# gates a merge would disagree, and the local one would be the one nobody
+# trusts.
+name: check
+
+on:
+  # Pushes to master, and every pull request. A branch with an open PR would
+  # otherwise be built twice for one commit.
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A second push supersedes the first; there is no reason to finish testing a
+# commit that has been replaced.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned rather than @latest: a staticcheck release adding a check should
+  # break the build when somebody chooses to upgrade it, not on the next
+  # unrelated push. Keep this in step with what developers install locally.
+  STATICCHECK_VERSION: v0.7.0
+
+jobs:
+  check:
+    name: make check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          # Track the go directive rather than repeating it here.
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@${{ env.STATICCHECK_VERSION }}
+
+      # `make lint` skips with a message and exits 0 when staticcheck is not on
+      # PATH, so that a fresh clone can run the suite without it. That is the
+      # right default locally and the wrong one here: it would let the lint
+      # quietly not happen while the job still went green. This step fails the
+      # job if the install above did not take.
+      - name: Confirm the linter is really present
+        run: staticcheck -version
+
+      # From the lockfile, so CI builds the dependency tree the repository
+      # records. `make web-deps` would npm install instead.
+      - name: Install frontend dependencies
+        run: make web-install
+
+      - run: make check
+
+      # The deployable artifact is a different build from the one `make check`
+      # exercises: the frontend has to compile and the binary is built with
+      # `-tags spa`. A fresh clone builds API-only, so nothing else here would
+      # notice the embed breaking.
+      - name: Build the release binary
+        run: make build
+
+  race:
+    name: go test -race
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # Not part of `make check`, which has to stay fast enough to run before
+      # every commit. It belongs here because this process is several
+      # goroutines deep by design -- the worker pool, the scheduler's tickers,
+      # the alert sender's critical path and its spool -- and a data race in
+      # any of them is the kind of fault that only shows up under load on the
+      # host, at which point the thing that would have reported it is the thing
+      # that broke.
+      #
+      # No frontend setup: this job never touches web/.
+      - name: Run the Go tests under the race detector
+        run: go test -race ./...

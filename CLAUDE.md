@@ -26,6 +26,12 @@ the Review inbox.
 | `make generate` | Regenerate the sqlc query layer; skips when sqlc is absent |
 | `make test` / `make test-web` | Either half of the test suite alone |
 
+`.github/workflows/check.yml` runs `make check` and `make build` on every pull
+request, plus `go test -race ./...`, which `make check` leaves out to stay quick
+enough to run before a commit. CI installs staticcheck and then asserts it is on
+PATH — `make lint` skips with a message and exits 0 without it, which is the
+right default for a fresh clone and the wrong one for a merge gate.
+
 `./bin/rental-bot -create-user <name>` is the only way a user is created.
 There is no registration endpoint by design. `-unpair-telegram` is the only way
 to change who the alert channel trusts, for the same kind of reason.
