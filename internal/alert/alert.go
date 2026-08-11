@@ -16,6 +16,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/farrellm/rental-bot/internal/domain"
 )
 
 // Severity is how loud a condition is.
@@ -124,31 +126,7 @@ func Resolve(ctx context.Context, p Publisher, key, title string) {
 	p.Resolve(ctx, key, title)
 }
 
-// truncate bounds what goes in a column and in a message.
-//
-// The same 500 characters the queue and the Gmail store cut their errors to. A
-// stack trace in an alert body is a stack trace nobody reads on a phone.
-func truncate(s string, limit int) string {
-	if len(s) <= limit {
-		return s
-	}
-	return s[:limit] + "..."
-}
-
-// stamp is a time as this schema spells every timestamp.
-func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339) }
-
-// parseStamp reads one back, reporting the zero time for anything unreadable
-// rather than failing a delivery over a column.
-func parseStamp(s string) time.Time {
-	at, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return time.Time{}
-	}
-	return at
-}
-
 // Errorf builds the detail line for an alert raised from an error.
 func Errorf(format string, args ...any) string {
-	return truncate(fmt.Sprintf(format, args...), detailLimit)
+	return domain.Truncate(fmt.Sprintf(format, args...), detailLimit)
 }

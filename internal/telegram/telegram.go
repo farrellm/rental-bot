@@ -44,11 +44,3 @@ var (
 	// got is telling it how to get closer.
 	ErrBadPairingCode = errors.New("telegram: that pairing code is not valid")
 )
-
-// truncate bounds what goes into a column and into a message.
-func truncate(s string, limit int) string {
-	if len(s) <= limit {
-		return s
-	}
-	return s[:limit] + "..."
-}

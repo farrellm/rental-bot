@@ -206,7 +206,7 @@ func (s *server) handleGetProperty(w http.ResponseWriter, r *http.Request) {
 	// are let without a second request. It is derived from the lease dates on
 	// every read rather than stored.
 	units, err := s.repo.Read().ListUnitsWithOccupancy(ctx, sqlc.ListUnitsWithOccupancyParams{
-		PropertyID: id, Today: today(),
+		PropertyID: id, Today: domain.Today(),
 	})
 	if err != nil {
 		loggerFrom(ctx).Error("list units", "error", err)
@@ -412,7 +412,7 @@ func (s *server) handleUpdateProperty(w http.ResponseWriter, r *http.Request) {
 	}
 
 	units, err := s.repo.Read().ListUnitsWithOccupancy(ctx, sqlc.ListUnitsWithOccupancyParams{
-		PropertyID: id, Today: today(),
+		PropertyID: id, Today: domain.Today(),
 	})
 	if err != nil {
 		loggerFrom(ctx).Error("list units", "error", err)
@@ -598,8 +598,10 @@ func decodeCursor(cursor string) (string, int64, error) {
 	return sortKey, id, nil
 }
 
-// timestamp is now, spelled the way this schema spells every timestamp.
-func timestamp() string { return time.Now().UTC().Format(time.RFC3339) }
+// timestamp is now, spelled the way this schema spells every timestamp. Unlike
+// the subsystems with an injectable clock, a request handler has no clock to
+// inject -- it always means this instant.
+func timestamp() string { return domain.Stamp(time.Now()) }
 
 // pathID reads a numeric path parameter, reporting a bad one and returning
 // false. A non-numeric id is a 404 rather than a 400: /properties/banana names

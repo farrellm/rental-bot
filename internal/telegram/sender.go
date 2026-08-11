@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/farrellm/rental-bot/internal/alert"
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/jobs"
 )
 
@@ -245,7 +246,7 @@ func digest(at time.Time, keys, parts []string) spooled {
 	return spooled{
 		At:   at,
 		Key:  strings.Join(keys, ","),
-		Text: truncate(head+strings.Join(parts, "\n\n"), messageLimit),
+		Text: domain.Truncate(head+strings.Join(parts, "\n\n"), messageLimit),
 	}
 }
 
@@ -391,5 +392,5 @@ func render(n alert.Notice, baseURL string) string {
 		b.WriteString(baseURL)
 		b.WriteString("/intake")
 	}
-	return truncate(b.String(), messageLimit)
+	return domain.Truncate(b.String(), messageLimit)
 }

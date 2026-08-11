@@ -3,6 +3,8 @@ package alert
 import (
 	"context"
 	"log/slog"
+
+	"github.com/farrellm/rental-bot/internal/domain"
 )
 
 // LogSink writes every notice to the process log and records it.
@@ -37,7 +39,7 @@ func (s *LogSink) Deliver(_ context.Context, n Notice) error {
 		args = append(args, "detail", n.Detail)
 	}
 	if n.Restated() {
-		args = append(args, "restated", n.SendCount+1, "since", stamp(n.FirstSeenAt))
+		args = append(args, "restated", n.SendCount+1, "since", domain.Stamp(n.FirstSeenAt))
 	}
 
 	switch {

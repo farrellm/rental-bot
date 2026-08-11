@@ -10,10 +10,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/farrellm/rental-bot/internal/auth"
 	"github.com/farrellm/rental-bot/internal/blob"
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
@@ -434,18 +434,7 @@ func (s *server) handleDocumentContent(w http.ResponseWriter, r *http.Request) {
 
 	// ServeContent seeks to size the body and answers range requests, which is
 	// how a browser scrubs a PDF without downloading all of it.
-	http.ServeContent(w, r, doc.OriginalFilename, modifiedAt(doc.UpdatedAt), f)
-}
-
-// modifiedAt reads a stored RFC3339 timestamp for ServeContent, which uses it
-// for Last-Modified and conditional requests. An unparseable one is the zero
-// time, which ServeContent reads as "do not claim to know".
-func modifiedAt(value string) time.Time {
-	at, err := time.Parse(time.RFC3339, value)
-	if err != nil {
-		return time.Time{}
-	}
-	return at
+	http.ServeContent(w, r, doc.OriginalFilename, domain.ParseStamp(doc.UpdatedAt), f)
 }
 
 // disposition decides whether a document may render in the browser.

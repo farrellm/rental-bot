@@ -12,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/farrellm/rental-bot/internal/auth"
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
@@ -57,7 +58,7 @@ func createUser(ctx context.Context, db *store.DB, username string) error {
 	}
 
 	repo := db.Repo()
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := domain.Stamp(time.Now())
 
 	existing, err := repo.Read().GetUserByUsername(ctx, username)
 	reset := err == nil

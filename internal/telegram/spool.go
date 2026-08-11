@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/farrellm/rental-bot/internal/domain"
 )
 
 // spoolLimit bounds how many undelivered messages are kept.
@@ -136,5 +138,5 @@ func safeName(key string) string {
 	if name == "" {
 		return "unkeyed"
 	}
-	return truncate(name, 64)
+	return domain.Truncate(name, 64)
 }

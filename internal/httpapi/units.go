@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
@@ -68,13 +67,6 @@ func newOccupiedUnitResponses(rows []sqlc.ListUnitsWithOccupancyRow) []unitRespo
 	}
 	return out
 }
-
-// today is the calendar date occupancy is asked about, in UTC.
-//
-// A date off a document is stored exactly as written with no timezone invented
-// for it (docs/DESIGN.md §3), so the question "does this lease cover today"
-// has to be asked in the same terms: one date string against two others.
-func today() string { return time.Now().UTC().Format(time.DateOnly) }
 
 type unitList struct {
 	Items []unitResponse `json:"items"`

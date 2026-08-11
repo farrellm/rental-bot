@@ -19,6 +19,7 @@ import (
 	"github.com/farrellm/rental-bot/internal/auth"
 	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/gmail"
 	"github.com/farrellm/rental-bot/internal/httpapi"
 	"github.com/farrellm/rental-bot/internal/jobs"
@@ -499,7 +500,7 @@ func logPairingCode(ctx context.Context, tokens *telegram.Store, username string
 	logger.Warn("the alert channel is not paired",
 		"send", "/start "+code,
 		"to", "@"+username,
-		"expires", expires.Format(time.RFC3339),
+		"expires", domain.Stamp(expires),
 	)
 }
 

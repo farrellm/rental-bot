@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/farrellm/rental-bot/internal/auth"
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/gmail"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
@@ -548,7 +549,7 @@ func (s *server) handleEmailMessageRaw(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition",
 		`attachment; filename="`+msg.GmailMessageID+`.eml"`)
 
-	http.ServeContent(w, r, msg.GmailMessageID+".eml", modifiedAt(msg.UpdatedAt), f)
+	http.ServeContent(w, r, msg.GmailMessageID+".eml", domain.ParseStamp(msg.UpdatedAt), f)
 }
 
 func (s *server) emailMessageReadError(w http.ResponseWriter, r *http.Request, err error) {
@@ -610,11 +611,13 @@ func decodeJSONQuietly(r *http.Request, dst any) error {
 	return json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes)).Decode(dst)
 }
 
+// formatTime renders an optional timestamp for the wire. A nil or zero time is
+// the empty string, because "not yet" and "the epoch" are different claims.
 func formatTime(at *time.Time) string {
 	if at == nil || at.IsZero() {
 		return ""
 	}
-	return at.UTC().Format(time.RFC3339)
+	return domain.Stamp(*at)
 }
 
 // formatHistoryID renders the cursor for the wire. Zero is empty, because "no

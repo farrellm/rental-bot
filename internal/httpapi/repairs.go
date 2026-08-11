@@ -193,7 +193,7 @@ func (s *server) handleCreateRepair(w http.ResponseWriter, r *http.Request) {
 		req.Status = "open"
 	}
 	if req.OpenedOn == "" {
-		req.OpenedOn = time.Now().UTC().Format(time.DateOnly)
+		req.OpenedOn = domain.Today()
 	}
 	req.Description = strings.TrimSpace(req.Description)
 
@@ -421,7 +421,7 @@ func (s *server) handleDeleteRepairEvent(w http.ResponseWriter, r *http.Request)
 // reconcileClosing supplies a closing date for a repair created as finished.
 func reconcileClosing(status string, closedOn *string) *string {
 	if closedStatuses[status] && closedOn == nil {
-		today := time.Now().UTC().Format(time.DateOnly)
+		today := domain.Today()
 		return &today
 	}
 	if !closedStatuses[status] {
@@ -437,7 +437,7 @@ func reconcileClosingTransition(status string, wasClosed bool, closedOn *string)
 	isClosed := closedStatuses[status]
 	switch {
 	case isClosed && !wasClosed:
-		today := time.Now().UTC().Format(time.DateOnly)
+		today := domain.Today()
 		return &today
 	case !isClosed:
 		return nil

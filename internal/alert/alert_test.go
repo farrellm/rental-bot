@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 	"github.com/farrellm/rental-bot/migrations"
@@ -319,9 +320,9 @@ func TestSeverityMatchesTheSchema(t *testing.T) {
 			Channel:     "telegram",
 			Severity:    string(s),
 			Title:       "a condition",
-			FirstSeenAt: stamp(time.Now()),
-			CreatedAt:   stamp(time.Now()),
-			UpdatedAt:   stamp(time.Now()),
+			FirstSeenAt: domain.Stamp(time.Now()),
+			CreatedAt:   domain.Stamp(time.Now()),
+			UpdatedAt:   domain.Stamp(time.Now()),
 		}); err != nil {
 			t.Errorf("the schema refused severity %q: %v", s, err)
 		}

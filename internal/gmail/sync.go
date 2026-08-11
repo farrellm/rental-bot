@@ -14,6 +14,7 @@ import (
 
 	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
@@ -322,12 +323,12 @@ func (s *Syncer) ingest(ctx context.Context, client *Client, gmailID string, lab
 		ThreadID:       raw.ThreadID,
 		FromAddr:       sender,
 		ToAddr:         SenderAddress(parsed.To),
-		Subject:        truncate(parsed.Subject, 500),
-		ReceivedAt:     receivedAt.UTC().Format(time.RFC3339),
-		Snippet:        truncate(snippet(raw.Snippet, parsed.Text), 500),
+		Subject:        domain.Clip(parsed.Subject, 500),
+		ReceivedAt:     domain.Stamp(receivedAt),
+		Snippet:        domain.Clip(snippet(raw.Snippet, parsed.Text), 500),
 		RawPath:        rawPath,
 		Status:         disposition,
-		Error:          truncate(detail, 500),
+		Error:          domain.Clip(detail, 500),
 		CreatedAt:      s.stamp(),
 		UpdatedAt:      s.stamp(),
 	})
@@ -368,7 +369,7 @@ func (s *Syncer) recordUningestible(ctx context.Context, gmailID string, cause e
 		GmailMessageID: gmailID,
 		ReceivedAt:     s.stamp(),
 		Status:         "failed",
-		Error:          truncate(cause.Error(), 500),
+		Error:          domain.Clip(cause.Error(), 500),
 		CreatedAt:      s.stamp(),
 		UpdatedAt:      s.stamp(),
 	})
@@ -391,7 +392,7 @@ func (s *Syncer) fileAttachments(ctx context.Context, msg sqlc.EmailMessage, att
 		row := sqlc.CreateEmailAttachmentParams{
 			EmailMessageID: msg.ID,
 			PartID:         att.PartID,
-			Filename:       truncate(att.Filename, 300),
+			Filename:       domain.Clip(att.Filename, 300),
 			Mime:           att.MIME,
 			SizeBytes:      int64(len(att.Content)),
 			CreatedAt:      s.stamp(),
@@ -441,8 +442,8 @@ func (s *Syncer) fileDocument(ctx context.Context, msg sqlc.EmailMessage, att At
 
 	return s.repo.Write().CreateDocument(ctx, sqlc.CreateDocumentParams{
 		Kind:             documentKind(att),
-		Title:            truncate(att.Filename, 200),
-		OriginalFilename: truncate(att.Filename, 300),
+		Title:            domain.Clip(att.Filename, 200),
+		OriginalFilename: domain.Clip(att.Filename, 300),
 		Mime:             contentType(att),
 		SizeBytes:        ref.Size,
 		Sha256:           ref.SHA256,
@@ -488,7 +489,9 @@ func (s *Syncer) messageCap() int64 {
 	return s.cfg.MaxAttachmentBytes * 4
 }
 
-func (s *Syncer) stamp() string { return s.now().UTC().Format(time.RFC3339) }
+// stamp is this syncer's clock, spelled the way every column holds a
+// timestamp. The clock is injectable; the format is not.
+func (s *Syncer) stamp() string { return domain.Stamp(s.now()) }
 
 // snippet prefers Gmail's own, falling back to the parsed body.
 func snippet(gmailSnippet, body string) string {
@@ -496,13 +499,6 @@ func snippet(gmailSnippet, body string) string {
 		return gmailSnippet
 	}
 	return strings.TrimSpace(strings.Join(strings.Fields(body), " "))
-}
-
-func truncate(value string, limit int) string {
-	if len(value) <= limit {
-		return value
-	}
-	return value[:limit]
 }
 
 // contentType settles on a type for a stored attachment.

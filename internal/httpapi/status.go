@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/version"
 )
@@ -40,12 +41,12 @@ func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Commit:        version.Commit,
 		BuildDate:     version.BuildDate,
 		GoVersion:     version.GoVersion(),
-		StartedAt:     s.startedAt.UTC().Format(time.RFC3339),
+		StartedAt:     domain.Stamp(s.startedAt),
 		UptimeSeconds: int64(time.Since(s.startedAt).Seconds()),
 		Database:      s.db.Path(),
 		Checks:        checks,
 		Migrations:    []store.Migration{},
-		CheckedAt:     time.Now().UTC().Format(time.RFC3339),
+		CheckedAt:     timestamp(),
 	}
 
 	// A degraded database is reported, not fatal: the card should still

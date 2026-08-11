@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/farrellm/rental-bot/internal/domain"
 )
 
 // Migration is one applied migration, as recorded in schema_migrations.
@@ -101,7 +103,7 @@ func (db *DB) apply(ctx context.Context, f migrationFile) (Migration, error) {
 		Version:   f.Version,
 		Name:      f.Name,
 		Checksum:  f.Checksum,
-		AppliedAt: time.Now().UTC().Format(time.RFC3339),
+		AppliedAt: domain.Stamp(time.Now()),
 	}
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)`,
