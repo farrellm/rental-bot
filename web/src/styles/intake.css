@@ -37,104 +37,6 @@
   margin-left: auto;
 }
 
-/* An empty state is an invitation, so it is set as a sentence rather than as a
-   value in the mono column. */
-.intake__empty {
-  padding: var(--gap-tight) 0;
-  font-size: var(--size-body);
-  color: var(--muted-ink);
-}
-
-.intake__missing {
-  margin: 0 0 var(--gap-tight);
-  padding-left: var(--gap);
-  font-size: var(--size-small);
-  color: var(--graphite);
-  overflow-wrap: anywhere;
-}
-
-/* The foot carries the tally and the actions in one column, with the stamp as
-   its flex sibling — the same arrangement the service record uses for its
-   migration ledger, so the stamp can never land on top of either however
-   narrow the card gets. */
-.intake__foot {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--gap-tight);
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-/* A running total, in the register's own nouns. */
-.intake__tally {
-  font-size: var(--size-small);
-  color: var(--muted-ink);
-}
-
-.intake__separator {
-  color: var(--card-rule);
-}
-
-/* The actions and the stamp are flex siblings in the foot, like every other
-   card. The failure line sits above them rather than beside, because an error
-   that has to share a row with three buttons is an error nobody reads. */
-.intake__actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--gap-hair);
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.intake__failure {
-  font-size: var(--size-small);
-  color: var(--oxide);
-  overflow-wrap: anywhere;
-}
-
-/* The register ------------------------------------------------------------ */
-
-.register {
-  padding: var(--gap) var(--gap-band) 0;
-  border-top: var(--rule);
-}
-
-.register__eyebrow {
-  font-size: var(--size-micro);
-  color: var(--muted-ink);
-}
-
-.register__day + .register__day {
-  margin-top: var(--gap-tight);
-}
-
-/* The day rule: a hairline with the date sitting on it, in the margin.
-   The rule is drawn with a gradient on the pseudo-element rather than a border
-   on the paragraph, so the date does not sit in a gap punched through it. */
-.register__rule {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-tight);
-  margin-top: var(--gap);
-}
-
-.register__rule::after {
-  content: "";
-  flex: 1 1 auto;
-  height: 1px;
-  background: var(--card-rule);
-}
-
-.register__date {
-  flex: 0 0 auto;
-  font-size: var(--size-micro);
-  letter-spacing: var(--track-label);
-  text-transform: uppercase;
-  color: var(--muted-ink);
-}
-
 /* One entry --------------------------------------------------------------- */
 
 .entry-line + .entry-line {
@@ -307,11 +209,6 @@
 /* Narrow ------------------------------------------------------------------ */
 
 @media (max-width: 40rem) {
-  .register {
-    padding-left: var(--gap-tight);
-    padding-right: var(--gap-tight);
-  }
-
   /* The stamp goes under the line rather than beside it, the way it does on
      every other card in this application when there is no room across. */
   .entry-line__line {

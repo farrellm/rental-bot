@@ -20,6 +20,7 @@ import "./styles/ledger.css";
 import "./styles/docket.css";
 import "./styles/lease.css";
 import "./styles/jacket.css";
+import "./styles/register.css";
 import "./styles/intake.css";
 import "./styles/dispatch.css";
 

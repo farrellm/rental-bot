@@ -19,12 +19,6 @@
  * the severity's own ink: the priority marking a clerk writes beside an entry.
  */
 
-.dispatch__empty {
-  padding: var(--gap-tight) 0;
-  font-size: var(--size-body);
-  color: var(--muted-ink);
-}
-
 /* The pairing instruction ------------------------------------------------- */
 
 /* The code is the only thing on this card the operator has to copy by hand, so
@@ -53,29 +47,6 @@
 }
 
 /* The foot ---------------------------------------------------------------- */
-
-/* Same arrangement as the intake card's: the tally and the actions in a column
-   with the stamp as their flex sibling, so the stamp can never land on top of
-   either however narrow the card gets. */
-.dispatch__foot {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--gap-tight);
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.dispatch__tally {
-  font-size: var(--size-small);
-  color: var(--muted-ink);
-}
-
-.dispatch__failure {
-  font-size: var(--size-small);
-  color: var(--oxide);
-  overflow-wrap: anywhere;
-}
 
 /* One notice -------------------------------------------------------------- */
 
