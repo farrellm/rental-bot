@@ -15,16 +15,8 @@ the Review inbox.
 
 ## Commands
 
-`make` lists everything. The ones that matter:
-
-| Command | Effect |
-| --- | --- |
-| `make check` | gofmt, vet, staticcheck, Go tests, frontend type-check. **A commit has to pass this.** |
-| `make dev` | API on :8082 and Vite on :5174 together; one Ctrl-C stops both |
-| `make build` | Frontend, then the binary with the SPA embedded, into `bin/` |
-| `make migrate` | Apply pending migrations and exit |
-| `make generate` | Regenerate the sqlc query layer; skips when sqlc is absent |
-| `make test` / `make test-web` | Either half of the test suite alone |
+`make` lists every target with a one-line description; the Makefile is the
+authority.
 
 `.github/workflows/check.yml` runs `make check` and `make build` on every pull
 request, plus `go test -race ./...`, which `make check` leaves out to stay quick
@@ -38,30 +30,11 @@ to change who the alert channel trusts, for the same kind of reason.
 
 ## Layout
 
-```
-cmd/rental-bot/     main, wiring, graceful shutdown
-internal/config     TOML + RENTAL_BOT_* env overlay
-internal/store      SQLite pools, migration runner, sqlc queries
-internal/auth       argon2id, sessions, CSRF, rate limiting, middleware
-internal/domain     Money, address normalization
-internal/blob       content-addressed store for document bytes
-internal/secret     AES-GCM for the encrypted columns, HKDF off the secret key
-internal/gmail      OAuth, watch, history sync, MIME parse, raw archive, OIDC
-internal/alert      the bus: severities, dedupe, cooldown, probes, sinks
-internal/telegram   pairing, the long-poll loop, the sender and its spool
-internal/jobs       SQLite-backed queue and the worker pool that drains it
-internal/scheduler  the ticker that enqueues periodic work
-internal/httpapi    handlers, DTOs, middleware, problem+json, SPA serving
-internal/version    ldflags-stamped build identity
-migrations/         NNNN_name.sql, embedded
-web/                Vite React app, plus the build-tagged embed
-```
-
-The packages in `docs/DESIGN.md` §10 that are not listed here — `ingest`,
-`llm`, `valuation` — arrive with the milestones that need them. Don't create
-them empty ahead of time. `internal/secret` is not in §10's list; it exists
-because §9.2's field encryption needed a home once M3 added the first encrypted
-column.
+`docs/DESIGN.md` §10 lists the packages. The ones it names that do not exist
+yet — `ingest`, `llm`, `valuation` — arrive with the milestones that need them.
+Don't create them empty ahead of time. `internal/secret` is not in §10's list;
+it exists because §9.2's field encryption needed a home once M3 added the first
+encrypted column.
 
 ## sqlc
 
@@ -84,8 +57,6 @@ and a fresh clone never need the tool.
 build tag so a fresh clone compiles and tests before anyone has run npm. That
 binary serves a root page saying so. `make build` runs the frontend first and
 compiles with `-tags spa`; that is the binary you deploy.
-
-`web/dist/` is generated and gitignored.
 
 ## Conventions that must not erode
 
