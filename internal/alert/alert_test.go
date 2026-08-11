@@ -47,7 +47,7 @@ func (r *recorder) all() []Notice {
 // openBus returns a bus over a real migrated database. The cooldown rests on a
 // partial unique index, and an index is only worth trusting against the real
 // schema.
-func openBus(t *testing.T) (*Bus, *recorder) {
+func openBus(t testing.TB) (*Bus, *recorder) {
 	t.Helper()
 
 	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "alert.db"), 2)
