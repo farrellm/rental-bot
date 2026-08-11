@@ -15,16 +15,8 @@ the Review inbox.
 
 ## Commands
 
-`make` lists everything. The ones that matter:
-
-| Command | Effect |
-| --- | --- |
-| `make check` | gofmt, vet, staticcheck, Go tests, frontend type-check. **A commit has to pass this.** |
-| `make dev` | API on :8082 and Vite on :5174 together; one Ctrl-C stops both |
-| `make build` | Frontend, then the binary with the SPA embedded, into `bin/` |
-| `make migrate` | Apply pending migrations and exit |
-| `make generate` | Regenerate the sqlc query layer; skips when sqlc is absent |
-| `make test` / `make test-web` | Either half of the test suite alone |
+`make` lists every target with a one-line description; the Makefile is the
+authority.
 
 `.github/workflows/check.yml` runs `make check` and `make build` on every pull
 request, plus `go test -race ./...`, which `make check` leaves out to stay quick
@@ -38,30 +30,11 @@ to change who the alert channel trusts, for the same kind of reason.
 
 ## Layout
 
-```
-cmd/rental-bot/     main, wiring, graceful shutdown
-internal/config     TOML + RENTAL_BOT_* env overlay
-internal/store      SQLite pools, migration runner, sqlc queries
-internal/auth       argon2id, sessions, CSRF, rate limiting, middleware
-internal/domain     Money, address normalization
-internal/blob       content-addressed store for document bytes
-internal/secret     AES-GCM for the encrypted columns, HKDF off the secret key
-internal/gmail      OAuth, watch, history sync, MIME parse, raw archive, OIDC
-internal/alert      the bus: severities, dedupe, cooldown, probes, sinks
-internal/telegram   pairing, the long-poll loop, the sender and its spool
-internal/jobs       SQLite-backed queue and the worker pool that drains it
-internal/scheduler  the ticker that enqueues periodic work
-internal/httpapi    handlers, DTOs, middleware, problem+json, SPA serving
-internal/version    ldflags-stamped build identity
-migrations/         NNNN_name.sql, embedded
-web/                Vite React app, plus the build-tagged embed
-```
-
-The packages in `docs/DESIGN.md` §10 that are not listed here — `ingest`,
-`llm`, `valuation` — arrive with the milestones that need them. Don't create
-them empty ahead of time. `internal/secret` is not in §10's list; it exists
-because §9.2's field encryption needed a home once M3 added the first encrypted
-column.
+`docs/DESIGN.md` §10 lists the packages. The ones it names that do not exist
+yet — `ingest`, `llm`, `valuation` — arrive with the milestones that need them.
+Don't create them empty ahead of time. `internal/secret` is not in §10's list;
+it exists because §9.2's field encryption needed a home once M3 added the first
+encrypted column.
 
 ## sqlc
 
@@ -84,8 +57,6 @@ and a fresh clone never need the tool.
 build tag so a fresh clone compiles and tests before anyone has run npm. That
 binary serves a root page saying so. `make build` runs the frontend first and
 compiles with `-tags spa`; that is the binary you deploy.
-
-`web/dist/` is generated and gitignored.
 
 ## Conventions that must not erode
 
@@ -227,25 +198,6 @@ decision, not a refactor.
 - **Property matching is deterministic Go** — normalize the address, compare
   against `properties.normalized_address`. The model returns a string; it
   never picks the property.
-- **Frontend colours and faces come from `web/src/styles/tokens.css`**, never a
-  literal hex value. Numbers use `.mono` so the tabular figures line up. The
-  visual language is the county record card; `web/src/styles/card.css` explains
-  it.
-- **An entry is not a box.** Labels are pre-printed and values are typed onto
-  the rule, so an input has no fill and no border except the line under it
-  (`web/src/styles/controls.css`). Read and amend states share the same row
-  geometry, which is what makes amending a card in place cost no reflow. Don't
-  add a fill on focus — the focus ring is the indicator, and a fill draws back
-  the box the whole design avoids.
-- **Buttons are ink on stock**: a rule and a word, never a filled rectangle.
-  Removing a row from a list is `.button--quiet` — a word in the margin with no
-  rule, revealed on hover or focus and always legible where there is no hover.
-  A bordered button on every line turns a list into a column of buttons with
-  some content beside it.
-- **A section of a property record is a divider tab**, cut from the same stock
-  (`.stock` in `card.css`) and lapping the card's top rule by a pixel. Below
-  40rem the tabs wrap, so the current one gets four edges instead — a joint
-  drawn to a row that is not the card reads as a bug.
 - **The stamp is the app's state machine.** One component says OPERATIONAL,
   DEGRADED, NO CONTACT, ACTIVE, PROSPECT, SOLD, AMENDING, REFUSED; from M2
   OPEN, SCHEDULED, IN PROGRESS, DONE, WON'T FIX, PENDING, ENDED, TERMINATED;
@@ -260,58 +212,18 @@ decision, not a refactor.
   and a reader should not have to learn a second set of words for them.
   Every variant is one `color:` declaration, because the border, inner ring,
   and divider all take `currentcolor`. It stays the only thing that moves.
-- **Severity is a margin mark, not a stamp.** The stamp means "the state of
-  this thing"; a notice's severity is a property of it. On the dispatch
-  register it is a `.stamped` word in the margin in the severity's own ink, the
-  way a clerk marks priority beside an entry. Giving it a stamp would make the
-  one bold mark on a card stop meaning one thing.
 - **The dispatch register is one line per condition.** A restatement bumps the
   `×n` tally in the margin; a cleared condition is ruled off with a
   strikethrough. That mark is the data model made visible, and it is why the
   API reads `notifications` one channel at a time — every subscribed channel
   has its own row per condition, so an unfiltered register shows everything
   twice.
-- **The lease term rule is the one drawn thing in the application** and it
-  stays that way. It draws only what the dates say: a month-to-month lease gets
-  no end tick, because inventing one asserts a fact the record does not hold.
-  Dates are differenced at UTC midnight — they were stored without a timezone,
-  and anything else makes "ends today" depend on where the reader is sitting.
-- **Nouns carry the metaphor, verbs stay plain.** A "record" with a "file
-  number" and an AMENDING stamp; buttons that say "Sign in", "Save changes",
-  "Add unit".
 - **Every screen has to look and work well on both a laptop and an iPhone.**
   This is a phone-first product in practice — approving a forwarded receipt
   happens on the phone, not at a desk — so a screen that only holds together
-  at 1280px is not finished. See below for what that means concretely.
-
-## Laptop and iPhone, both
-
-Treat 320px (iPhone SE) through 1920px as the supported range, portrait and
-landscape. The card layout switches at `40rem`: two columns above, stacked
-below.
-
-What has to hold at every width:
-
-- No horizontal scrolling, ever. `document.scrollWidth` must equal
-  `clientWidth`.
-- Nothing overlaps. Reserve space with layout — flex or grid siblings — rather
-  than a fixed padding guessed against another element's width. That guess is
-  what broke the ledger against the stamp at 660px.
-- Text stays legible: no tap target or control below 44px, and no body text
-  below 11px.
-- No form control under 16px on a touch device. Safari auto-zooms the viewport
-  when it focuses one and never restores the scale. `--size-body` goes to 1rem
-  under `(pointer: coarse)` in `tokens.css`, which moves the read value with
-  the entry so amending still costs no reflow.
-- Layout survives inflated type. A flex item needs `min-width: 0` before
-  `max-width` will constrain it, because the automatic minimum is the
-  min-content width and a long word will not break on its own.
-
-Verify with real device emulation, not a resized desktop viewport — a desktop
-context narrowed to 320px applies text autosizing that a real iPhone does not,
-and will report failures that do not exist. Wait for `networkidle` **and**
-`document.fonts.ready` before measuring; the unstyled first paint is much
-wider than the real layout and produces phantom overflow.
+  at 1280px is not finished. `web/CLAUDE.md` says what that means concretely,
+  along with the rest of the frontend's conventions; it loads when you work
+  under `web/`.
 
 ## Testing
 
@@ -361,8 +273,8 @@ assertion library. Store tests open a real SQLite file under `t.TempDir()`;
 - **Rate-limiter state is in memory** and does not survive a restart.
   Persisting it would put a write on every failed sign-in.
 - **TOTP is still deferred.** The `users.totp_secret` column carries no rows.
-- **`telegram_state.muted_until` is written by nothing.** `/mute` is an inbound
-  command and inbound commands are M6's. The column, the suppression in the
+- **Nothing calls `telegram.Store.Mute`,** so `telegram_state.muted_until` is
+  never set. `/mute` is an inbound command and inbound commands are M6's. The column, the suppression in the
   sender, and the MUTED stamp all exist and are tested; there is no way to set
   it yet, which is the right order — the thing that reads a state should exist
   before the thing that writes it.
