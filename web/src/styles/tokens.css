@@ -55,7 +55,7 @@
   --gap-band: 1.5rem;
   --card-width: 44rem;
   --card-width-slip: 24rem; /* the sign-in slip, narrower than a full record */
-  --index-min: 18rem;       /* narrowest an index card gets before the grid reflows */
+  --index-min: 18rem; /* narrowest an index card gets before the grid reflows */
 
   /* Nothing you touch is smaller than this, at any width. */
   --control-min: 44px;

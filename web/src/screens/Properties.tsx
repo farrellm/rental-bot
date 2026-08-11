@@ -1,7 +1,6 @@
 import { Link } from "react-router";
 
-import { describeError } from "../api/client";
-import { useProperties } from "../api/queries";
+import { describeError, useProperties } from "../api";
 import { IndexCard } from "../components/IndexCard";
 import { plural } from "../format";
 

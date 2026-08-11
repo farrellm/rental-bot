@@ -73,7 +73,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       method,
       headers,
       signal: options.signal,
-      body: options.body === undefined ? undefined : isForm ? (options.body as FormData) : JSON.stringify(options.body),
+      body:
+        options.body === undefined
+          ? undefined
+          : isForm
+            ? (options.body as FormData)
+            : JSON.stringify(options.body),
       // The session is a cookie; same-origin is the default but saying so
       // keeps it true if this is ever served from somewhere else.
       credentials: "same-origin",

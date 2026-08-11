@@ -1,15 +1,18 @@
 import { useState } from "react";
-import { useParams } from "react-router";
 
-import { describeError } from "../../api/client";
 import {
+  describeError,
   useCreateTransaction,
   useDeleteTransaction,
   useTransactions,
   type LedgerFilter,
-} from "../../api/queries";
-import type { TransactionCategory } from "../../api/types";
-import { calendarDate, money, parseMoney } from "../../format";
+  type TransactionCategory,
+} from "../../api";
+import { Select } from "../../components/Select";
+import { SheetField, SheetFilter } from "../../components/SheetField";
+import { SheetForm } from "../../components/SheetForm";
+import { calendarDate, DASH, isCalendarDate, money, parseMoney, today } from "../../format";
+import { usePropertyId } from "./usePropertyId";
 
 /** The categories, in the order the ledger's own CHECK lists them. */
 const CATEGORIES: TransactionCategory[] = [
@@ -43,7 +46,24 @@ const CATEGORY_LABEL: Record<TransactionCategory, string> = {
   other: "Other",
 };
 
+/**
+ * The sign, chosen as a word.
+ *
+ * "-285.00" is a thing people mistype and "Money out" is not. It becomes
+ * signed cents at the form's boundary and nowhere else.
+ */
+type Direction = "in" | "out";
+
+const DIRECTIONS: Direction[] = ["out", "in"];
+
+const DIRECTION_LABEL: Record<Direction, string> = {
+  out: "Money out",
+  in: "Money in",
+};
+
 type Range = "month" | "year" | "all";
+
+const RANGES: Range[] = ["month", "year", "all"];
 
 const RANGE_LABEL: Record<Range, string> = {
   month: "This month",
@@ -62,8 +82,7 @@ const RANGE_LABEL: Record<Range, string> = {
  * figure allowed to raise its voice, and only when it is negative.
  */
 export function CashFlow() {
-  const params = useParams();
-  const propertyId = Number(params.id ?? 0);
+  const propertyId = usePropertyId();
 
   const [range, setRange] = useState<Range>("year");
   const [category, setCategory] = useState<TransactionCategory | "">("");
@@ -93,36 +112,26 @@ export function CashFlow() {
         {/* The tab overhead already says which section this is. */}
         <div className="sheet__head">
           <div className="sheet__filters">
-            <label className="sheet__filter">
-              <span className="sheet__filter-label stamped">Range</span>
-              <select
-                className="entry entry--short"
+            <SheetFilter label="Range">
+              <Select
                 value={range}
-                onChange={(e) => setRange(e.target.value as Range)}
-              >
-                {(Object.keys(RANGE_LABEL) as Range[]).map((key) => (
-                  <option key={key} value={key}>
-                    {RANGE_LABEL[key]}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={setRange}
+                options={RANGES}
+                labels={RANGE_LABEL}
+                short
+              />
+            </SheetFilter>
 
-            <label className="sheet__filter">
-              <span className="sheet__filter-label stamped">Category</span>
-              <select
-                className="entry entry--short"
+            <SheetFilter label="Category">
+              <Select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as TransactionCategory | "")}
-              >
-                <option value="">All</option>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {CATEGORY_LABEL[c]}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={setCategory}
+                options={CATEGORIES}
+                labels={CATEGORY_LABEL}
+                anyLabel="All"
+                short
+              />
+            </SheetFilter>
           </div>
         </div>
 
@@ -148,9 +157,11 @@ export function CashFlow() {
 
                 {ledger.data.items.map((entry) => (
                   <div key={entry.id} className="ledger-sheet__row">
-                    <span className="ledger-sheet__date mono">{calendarDate(entry.occurred_on)}</span>
+                    <span className="ledger-sheet__date mono">
+                      {calendarDate(entry.occurred_on)}
+                    </span>
                     <span className="ledger-sheet__entry">
-                      {entry.description || entry.counterparty || "—"}
+                      {entry.description || entry.counterparty || DASH}
                       {entry.needs_review && (
                         <span className="ledger-sheet__flag stamped"> needs review</span>
                       )}
@@ -212,7 +223,11 @@ export function CashFlow() {
           />
         ) : (
           <div className="sheet__actions">
-            <button type="button" className="button button--primary" onClick={() => setAdding(true)}>
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() => setAdding(true)}
+            >
               Add an entry
             </button>
           </div>
@@ -242,7 +257,7 @@ interface EntryFormProps {
 function EntryForm({ onCancel, onSubmit }: EntryFormProps) {
   const [occurredOn, setOccurredOn] = useState(today());
   const [amount, setAmount] = useState("");
-  const [direction, setDirection] = useState<"in" | "out">("out");
+  const [direction, setDirection] = useState<Direction>("out");
   const [category, setCategory] = useState<TransactionCategory>("repair");
   const [description, setDescription] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
@@ -251,7 +266,7 @@ function EntryForm({ onCancel, onSubmit }: EntryFormProps) {
   async function submit() {
     if (saving) return;
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(occurredOn.trim())) {
+    if (!isCalendarDate(occurredOn)) {
       setProblem("Write the date as YYYY-MM-DD.");
       return;
     }
@@ -276,94 +291,65 @@ function EntryForm({ onCancel, onSubmit }: EntryFormProps) {
   }
 
   return (
-    <div className="sheet__form">
-      <h3 className="sheet__eyebrow stamped">New entry</h3>
+    <SheetForm
+      title="New entry"
+      problem={problem}
+      saving={saving}
+      submitLabel="Save entry"
+      onSubmit={() => void submit()}
+      onCancel={onCancel}
+    >
+      <SheetField label="Date">
+        <input
+          className="entry"
+          value={occurredOn}
+          onChange={(e) => setOccurredOn(e.target.value)}
+          placeholder="YYYY-MM-DD"
+          inputMode="numeric"
+          autoComplete="off"
+        />
+      </SheetField>
 
-      <div className="sheet__form-rows">
-        <label className="sheet__field">
-          <span className="field__label stamped">Date</span>
-          <input
-            className="entry"
-            value={occurredOn}
-            onChange={(e) => setOccurredOn(e.target.value)}
-            placeholder="YYYY-MM-DD"
-            inputMode="numeric"
-            autoComplete="off"
-          />
-        </label>
+      <SheetField label="Direction">
+        <Select
+          value={direction}
+          onChange={setDirection}
+          options={DIRECTIONS}
+          labels={DIRECTION_LABEL}
+        />
+      </SheetField>
 
-        <label className="sheet__field">
-          <span className="field__label stamped">Direction</span>
-          <select
-            className="entry"
-            value={direction}
-            onChange={(e) => setDirection(e.target.value as "in" | "out")}
-          >
-            <option value="out">Money out</option>
-            <option value="in">Money in</option>
-          </select>
-        </label>
+      <SheetField label="Amount">
+        <input
+          className="entry"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="285.00"
+          inputMode="decimal"
+          autoComplete="off"
+        />
+      </SheetField>
 
-        <label className="sheet__field">
-          <span className="field__label stamped">Amount</span>
-          <input
-            className="entry"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="285.00"
-            inputMode="decimal"
-            autoComplete="off"
-          />
-        </label>
+      <SheetField label="Category">
+        <Select
+          value={category}
+          onChange={setCategory}
+          options={CATEGORIES}
+          labels={CATEGORY_LABEL}
+        />
+      </SheetField>
 
-        <label className="sheet__field">
-          <span className="field__label stamped">Category</span>
-          <select
-            className="entry"
-            value={category}
-            onChange={(e) => setCategory(e.target.value as TransactionCategory)}
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_LABEL[c]}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="sheet__field sheet__field--wide">
-          <span className="field__label stamped">Entry</span>
-          <input
-            className="entry"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Ace Plumbing, kitchen tap"
-            autoComplete="off"
-          />
-        </label>
-      </div>
-
-      {problem && <p className="hint hint--fault">{problem}</p>}
-
-      <div className="actions">
-        <button
-          type="button"
-          className="button button--primary"
-          onClick={() => void submit()}
-          disabled={saving}
-        >
-          {saving ? "Saving" : "Save entry"}
-        </button>
-        <button type="button" className="button" onClick={onCancel} disabled={saving}>
-          Cancel
-        </button>
-      </div>
-    </div>
+      <SheetField label="Entry" wide>
+        <input
+          className="entry"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Ace Plumbing, kitchen tap"
+          autoComplete="off"
+        />
+      </SheetField>
+    </SheetForm>
   );
-}
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 /**
@@ -384,5 +370,8 @@ function rangeDates(range: Range): { from?: string; to?: string } {
 
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
-  return { from: `${year}-${month}-01`, to: `${year}-${month}-${String(lastDay).padStart(2, "0")}` };
+  return {
+    from: `${year}-${month}-01`,
+    to: `${year}-${month}-${String(lastDay).padStart(2, "0")}`,
+  };
 }

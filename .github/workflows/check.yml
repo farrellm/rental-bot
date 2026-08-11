@@ -93,6 +93,8 @@ jobs:
       # host, at which point the thing that would have reported it is the thing
       # that broke.
       #
-      # No frontend setup: this job never touches web/.
+      # No frontend setup: this job never touches web/, which is also why it
+      # can say ./... where the Makefile has to filter web/node_modules out --
+      # nothing installed it here.
       - name: Run the Go tests under the race detector
         run: go test -race ./...

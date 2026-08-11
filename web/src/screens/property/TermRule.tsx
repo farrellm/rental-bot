@@ -1,4 +1,4 @@
-import type { LeaseStatus } from "../../api/types";
+import type { LeaseStatus } from "../../api";
 
 interface Props {
   start: string;
@@ -30,11 +30,7 @@ export function TermRule({ start, end, status }: Props) {
 
   return (
     <div className="term">
-      <div
-        className="term__rule"
-        role="img"
-        aria-label={describe(start, end, term, status)}
-      >
+      <div className="term__rule" role="img" aria-label={describe(start, end, term, status)}>
         {/* The spent portion. On an open-ended term there is nothing to be a
             portion of, so it is left undrawn rather than guessed at. */}
         {term.fraction !== null && (

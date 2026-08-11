@@ -20,11 +20,12 @@ import "./styles/ledger.css";
 import "./styles/docket.css";
 import "./styles/lease.css";
 import "./styles/jacket.css";
+import "./styles/register.css";
 import "./styles/intake.css";
 import "./styles/dispatch.css";
 
 import { AppRoutes } from "./routes";
-import { ApiError } from "./api/client";
+import { ApiError } from "./api";
 
 const client = new QueryClient({
   defaultOptions: {

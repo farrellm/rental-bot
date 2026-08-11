@@ -1,10 +1,17 @@
 /** Formatting for the value column. Every result is fixed-width friendly. */
 
-const EM_DASH = "—";
+/**
+ * What an unknown value reads as, everywhere.
+ *
+ * A blank cell says the column is broken; a dash says the record does not hold
+ * the fact. Every screen means the second thing, so they all spell it from
+ * here rather than each carrying its own literal.
+ */
+export const DASH = "—";
 
 /** Renders a duration in seconds as "00:14:22", or "3d 04:12:07" past a day. */
 export function uptime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return EM_DASH;
+  if (!Number.isFinite(seconds) || seconds < 0) return DASH;
 
   const days = Math.floor(seconds / 86_400);
   const clock = [
@@ -25,7 +32,7 @@ export function uptime(seconds: number): string {
  */
 export function timestamp(iso: string): string {
   const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return EM_DASH;
+  if (Number.isNaN(at.getTime())) return DASH;
 
   return `${datePart(at)} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
@@ -33,20 +40,20 @@ export function timestamp(iso: string): string {
 /** Renders just the wall-clock time, "21:04:12". */
 export function clock(iso: string): string {
   const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return EM_DASH;
+  if (Number.isNaN(at.getTime())) return DASH;
 
   return `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`;
 }
 
 /** Shortens a commit hash to the length people actually read. */
 export function commit(hash: string): string {
-  if (!hash || hash === "unknown") return EM_DASH;
+  if (!hash || hash === "unknown") return DASH;
   return hash.length > 7 ? hash.slice(0, 7) : hash;
 }
 
 /** Falls back to an em dash so the column never shows an empty cell. */
 export function orDash(value: string | undefined): string {
-  return value && value !== "unknown" ? value : EM_DASH;
+  return value && value !== "unknown" ? value : DASH;
 }
 
 /**
@@ -58,7 +65,7 @@ export function orDash(value: string | undefined): string {
  * property that cost nothing.
  */
 export function money(cents: number | null | undefined): string {
-  if (cents === null || cents === undefined || !Number.isFinite(cents)) return EM_DASH;
+  if (cents === null || cents === undefined || !Number.isFinite(cents)) return DASH;
 
   const negative = cents < 0;
   const abs = Math.abs(Math.trunc(cents));
@@ -87,7 +94,7 @@ export function parseMoney(input: string): number | null | undefined {
 
 /** Renders a nullable number, so an unknown value reads as unknown. */
 export function orDashNumber(value: number | null | undefined, suffix = ""): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return EM_DASH;
+  if (value === null || value === undefined || !Number.isFinite(value)) return DASH;
   return `${value}${suffix}`;
 }
 
@@ -109,7 +116,50 @@ export function fileNumber(id: number): string {
 
 /** A calendar date exactly as stored, never reinterpreted through a timezone. */
 export function calendarDate(value: string | null | undefined): string {
-  return value ? value : EM_DASH;
+  return value ? value : DASH;
+}
+
+/**
+ * The shape a calendar date has to have on its way in.
+ *
+ * Only the shape. Whether 2026-02-31 is a day is the server's question, and
+ * asking it twice in two places would let the two answers drift. Every form
+ * that takes a date checks this and then says its own sentence about it.
+ */
+export function isCalendarDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
+}
+
+/**
+ * Today, as a calendar date in the reader's own timezone.
+ *
+ * `toISOString` would answer in UTC, which is a different day for most of the
+ * evening in the Americas — a receipt entered at 9pm would default to
+ * tomorrow's date.
+ */
+export function today(): string {
+  return datePart(new Date());
+}
+
+/** The parts of an address, all optional: a record may hold only some. */
+export interface AddressParts {
+  address_line1?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+}
+
+/**
+ * The address on one line, skipping the parts that were never filled in.
+ *
+ * The index card leaves the postal code out and the record head puts it in,
+ * which is the only difference between the two callers — so it is a field
+ * that is absent rather than a second function.
+ */
+export function oneLineAddress(parts: AddressParts | undefined): string {
+  if (!parts) return DASH;
+  const region = [parts.city, parts.state, parts.postal_code].filter(Boolean).join(" ");
+  return [parts.address_line1, region].filter(Boolean).join(", ") || DASH;
 }
 
 function datePart(at: Date): string {
@@ -128,7 +178,7 @@ function pad(n: number): string {
  * 2.3 MB here.
  */
 export function bytes(count: number | null | undefined): string {
-  if (count === null || count === undefined || !Number.isFinite(count)) return EM_DASH;
+  if (count === null || count === undefined || !Number.isFinite(count)) return DASH;
   if (count < 1_000) return `${Math.trunc(count)} B`;
 
   const units = ["kB", "MB", "GB"];
@@ -149,9 +199,9 @@ export function bytes(count: number | null | undefined): string {
  * The exact time is still on the line beside it.
  */
 export function ago(iso: string | undefined, now = Date.now()): string {
-  if (!iso) return EM_DASH;
+  if (!iso) return DASH;
   const at = new Date(iso).getTime();
-  if (Number.isNaN(at)) return EM_DASH;
+  if (Number.isNaN(at)) return DASH;
 
   const seconds = Math.round((now - at) / 1_000);
   if (seconds < 0) return "just now";
@@ -181,12 +231,22 @@ export function ago(iso: string | undefined, now = Date.now()): string {
  */
 export function dayRule(iso: string): string {
   const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return EM_DASH;
+  if (Number.isNaN(at.getTime())) return DASH;
 
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
   ];
   return `${days[at.getDay()]} ${at.getDate()} ${months[at.getMonth()]}`;
 }
@@ -201,6 +261,6 @@ export function dayKey(iso: string): string {
 /** Just the hour and minute: "14:02". */
 export function hourMinute(iso: string): string {
   const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return EM_DASH;
+  if (Number.isNaN(at.getTime())) return DASH;
   return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }

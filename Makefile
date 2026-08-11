@@ -17,10 +17,20 @@ LDFLAGS := -s -w \
 
 NPM := npm --prefix web
 
+# Our own packages, which is not what `./...` means here.
+#
+# web/node_modules is inside the module, and npm dependencies are entitled to
+# ship whatever they like -- eslint pulls in flatted, which carries a Go
+# implementation of itself. `./...` walks into it, so `go vet` and staticcheck
+# would be reading third-party code and could fail this build over a file
+# nobody here wrote. The go tool has no exclude flag; listing and filtering is
+# the way.
+GOPKGS = $(shell go list ./... | grep -v '/web/node_modules/')
+
 .DEFAULT_GOAL := help
 .PHONY: help dev dev-api dev-web watch watch-dev build run migrate test test-web \
-        fmt fmt-check vet lint check generate tidy web-deps web-install \
-        web-build web-clean clean db-shell
+        fmt fmt-web fmt-check fmt-check-web vet lint lint-web check generate \
+        tidy web-deps web-install web-build web-clean clean db-shell
 
 help: ## List the targets
 	@grep -hE '^[a-z][a-z-]*:.*?## ' $(MAKEFILE_LIST) \
@@ -60,10 +70,13 @@ migrate: ## Apply pending migrations and exit
 
 ## Checks --------------------------------------------------------------------
 
-check: fmt-check vet lint test test-web ## Everything a commit has to pass
+# Both halves, and the same three things asked of each: formatted, vetted,
+# linted, tested. The frontend went a long time with only the type-check, and
+# it drifted in exactly the ways an unenforced style drifts.
+check: fmt-check fmt-check-web vet lint lint-web test test-web ## Everything a commit has to pass
 
 test: ## Run the Go tests
-	go test ./...
+	go test $(GOPKGS)
 
 test-web: web-deps ## Type-check the frontend
 	@$(NPM) run typecheck
@@ -71,21 +84,32 @@ test-web: web-deps ## Type-check the frontend
 fmt: ## Format the Go sources
 	gofmt -w .
 
-fmt-check: ## Fail if anything is unformatted
+fmt-web: web-deps ## Format the frontend sources
+	@$(NPM) run format
+
+fmt-check: ## Fail if any Go source is unformatted
 	@unformatted=$$(gofmt -l .); \
 	if [ -n "$$unformatted" ]; then \
 		echo "gofmt needed:"; echo "$$unformatted"; exit 1; \
 	fi
 
+fmt-check-web: web-deps ## Fail if any frontend source is unformatted
+	@$(NPM) run format:check
+
 vet: ## Run go vet
-	go vet ./...
+	go vet $(GOPKGS)
 
 lint: ## Run staticcheck when it is installed
 	@if command -v staticcheck >/dev/null 2>&1; then \
-		staticcheck ./...; \
+		staticcheck $(GOPKGS); \
 	else \
 		echo "staticcheck not installed; skipping (go install honnef.co/go/tools/cmd/staticcheck@latest)"; \
 	fi
+
+# No "skip when missing" branch, unlike staticcheck: eslint comes from the
+# lockfile, so web-deps has already installed it or nothing frontend works.
+lint-web: web-deps ## Lint the frontend
+	@$(NPM) run lint
 
 ## Codegen -------------------------------------------------------------------
 

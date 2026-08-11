@@ -1,13 +1,20 @@
 import { useState } from "react";
 
-import { describeError } from "../api/client";
-import { useChannelStanding, useIssuePairingCode, useNotices, useSendTestNotice } from "../api/queries";
-import type { ChannelStanding, Notice, PairingCode, Severity } from "../api/types";
+import {
+  describeError,
+  useChannelStanding,
+  useIssuePairingCode,
+  useNotices,
+  useSendTestNotice,
+  type ChannelStanding,
+  type Notice,
+  type PairingCode,
+  type Severity,
+} from "../api";
+import { DayRegister } from "../components/DayRegister";
 import { FieldRow } from "../components/FieldRow";
 import { Stamp, type StampState } from "../components/Stamp";
-import { ago, clock, dayKey, dayRule, hourMinute, plural, timestamp } from "../format";
-
-const DASH = "—";
+import { ago, clock, DASH, hourMinute, plural, timestamp } from "../format";
 
 /** The channel's state and the word stamped on the card are one vocabulary. */
 const STATE_STAMP: Record<ChannelStanding["state"], StampState> = {
@@ -65,19 +72,26 @@ export function Dispatch() {
 
       {data && <Standing standing={data} issued={issued} />}
 
-      <Register
-        notices={notices.data?.items ?? []}
+      {/* The same register the mail room keeps, in the other direction. */}
+      <DayRegister
+        eyebrow="Sent"
+        entries={notices.data?.items ?? []}
+        keyOf={(notice) => notice.id}
+        at={(notice) => notice.first_seen_at}
+        render={(notice) => <Line notice={notice} />}
         loading={notices.isPending}
         error={notices.isError ? describeError(notices.error) : null}
-        standing={data}
+        empty={emptyRegister(data)}
       />
 
       <footer className="card__foot">
-        <div className="dispatch__foot">
+        <div className="register__foot">
           <Tally standing={data} />
           <Actions standing={data} onIssued={setIssued} />
         </div>
-        {!standing.isPending && data && <Stamp state={STATE_STAMP[data.state]} at={data.checked_at} />}
+        {!standing.isPending && data && (
+          <Stamp state={STATE_STAMP[data.state]} at={data.checked_at} />
+        )}
       </footer>
     </section>
   );
@@ -95,11 +109,11 @@ function Standing({ standing, issued }: { standing: ChannelStanding; issued: Pai
   if (!standing.configured) {
     return (
       <div className="card__fields">
-        <p className="dispatch__empty">
+        <p className="register__empty">
           Nothing will be sent anywhere. Conditions are still recorded below. Fill these in and
           restart:
         </p>
-        <ul className="intake__missing mono">
+        <ul className="register__missing mono">
           {(standing.missing ?? []).map((key) => (
             <li key={key}>{key}</li>
           ))}
@@ -115,7 +129,8 @@ function Standing({ standing, issued }: { standing: ChannelStanding; issued: Pai
   return (
     <dl className="card__fields">
       <FieldRow label="Sends to">
-        @{standing.bot_username ?? DASH}, paired {standing.paired_at ? timestamp(standing.paired_at) : DASH}
+        @{standing.bot_username ?? DASH}, paired{" "}
+        {standing.paired_at ? timestamp(standing.paired_at) : DASH}
       </FieldRow>
       <FieldRow label="Last sent">
         {standing.last_sent_at ? ago(standing.last_sent_at) : "nothing has gone out yet"}
@@ -142,7 +157,7 @@ function Pairing({ standing, issued }: { standing: ChannelStanding; issued: Pair
   if (!issued) {
     return (
       <div className="card__fields">
-        <p className="dispatch__empty">
+        <p className="register__empty">
           Nobody is paired, so nothing is being sent. Get a code and send it to @{bot} from the
           phone you want the alerts on.
         </p>
@@ -186,17 +201,17 @@ function Tally({ standing }: { standing: ChannelStanding | null }) {
 
   const open = standing.sent - standing.cleared;
   return (
-    <p className="dispatch__tally">
+    <p className="register__tally">
       <span className="mono">{standing.sent}</span> {standing.sent === 1 ? "notice" : "notices"}
       {open > 0 && (
         <>
-          <span className="intake__separator"> · </span>
+          <span className="register__separator"> · </span>
           <span className="mono">{open}</span> outstanding
         </>
       )}
       {standing.cleared > 0 && (
         <>
-          <span className="intake__separator"> · </span>
+          <span className="register__separator"> · </span>
           <span className="mono">{standing.cleared}</span> cleared
         </>
       )}
@@ -222,11 +237,9 @@ function Actions({
   const failure = issue.error ?? test.error;
 
   return (
-    <div className="intake__actions">
-      {failure && <p className="dispatch__failure">{describeError(failure)}</p>}
-      {test.isSuccess && !test.isPending && (
-        <p className="dispatch__tally">Test notice sent.</p>
-      )}
+    <div className="register__actions">
+      {failure && <p className="register__failure">{describeError(failure)}</p>}
+      {test.isSuccess && !test.isPending && <p className="register__tally">Test notice sent.</p>}
 
       <div className="actions">
         {!standing.paired && (
@@ -254,58 +267,12 @@ function Actions({
 
       {standing.paired && (
         <p className="dispatch__note">
-          Unpairing needs a shell on the host: <span className="mono">rental-bot -unpair-telegram</span>.
-          Nothing reachable from a browser or from the chat can change who gets these.
+          Unpairing needs a shell on the host:{" "}
+          <span className="mono">rental-bot -unpair-telegram</span>. Nothing reachable from a
+          browser or from the chat can change who gets these.
         </p>
       )}
     </div>
-  );
-}
-
-interface RegisterProps {
-  notices: Notice[];
-  loading: boolean;
-  error: string | null;
-  standing: ChannelStanding | null;
-}
-
-/**
- * The outbound register, kept by day like the receiving one.
- *
- * One line per condition. The tally in the margin is how many times it has been
- * struck, and a ruled-off line is a matter that cleared.
- */
-function Register({ notices, loading, error, standing }: RegisterProps) {
-  if (error) {
-    return (
-      <section className="register">
-        <p className="register__eyebrow stamped">Sent</p>
-        <p className="dispatch__empty">{error}</p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="register">
-      <p className="register__eyebrow stamped">Sent</p>
-
-      {loading && <p className="dispatch__empty">Reading the register…</p>}
-
-      {!loading && notices.length === 0 && (
-        <p className="dispatch__empty">{emptyRegister(standing)}</p>
-      )}
-
-      {groupByDay(notices).map(([day, entries]) => (
-        <div key={day} className="register__day">
-          <p className="register__rule">
-            <span className="register__date mono">{dayRule(entries[0]?.first_seen_at ?? day)}</span>
-          </p>
-          {entries.map((entry) => (
-            <Line key={entry.id} notice={entry} />
-          ))}
-        </div>
-      ))}
-    </section>
   );
 }
 
@@ -347,24 +314,11 @@ function Line({ notice }: { notice: Notice }) {
           </span>
         )}
         {cleared && notice.resolved_at && (
-          <span className="notice-line__cleared stamped">cleared {hourMinute(notice.resolved_at)}</span>
+          <span className="notice-line__cleared stamped">
+            cleared {hourMinute(notice.resolved_at)}
+          </span>
         )}
       </div>
     </div>
   );
-}
-
-/** Groups the register by local day, newest first, preserving order within. */
-function groupByDay(notices: Notice[]): [string, Notice[]][] {
-  const days = new Map<string, Notice[]>();
-  for (const notice of notices) {
-    const key = dayKey(notice.first_seen_at);
-    const bucket = days.get(key);
-    if (bucket) {
-      bucket.push(notice);
-    } else {
-      days.set(key, [notice]);
-    }
-  }
-  return [...days.entries()];
 }

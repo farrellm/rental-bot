@@ -1,10 +1,17 @@
 import { useRef, useState } from "react";
-import { useParams } from "react-router";
 
-import { describeError } from "../../api/client";
-import { useDeleteDocument, useDocuments, useUploadDocument } from "../../api/queries";
-import type { Document, DocumentKind } from "../../api/types";
-import { timestamp } from "../../format";
+import {
+  describeError,
+  useDeleteDocument,
+  useDocuments,
+  useUploadDocument,
+  type Document,
+  type DocumentKind,
+} from "../../api";
+import { Select } from "../../components/Select";
+import { SheetFilter } from "../../components/SheetField";
+import { bytes, timestamp } from "../../format";
+import { usePropertyId } from "./usePropertyId";
 
 const KINDS: DocumentKind[] = [
   "lease",
@@ -38,8 +45,7 @@ const KIND_LABEL: Record<DocumentKind, string> = {
  * forwarding the same receipt twice files it once.
  */
 export function Documents() {
-  const params = useParams();
-  const propertyId = Number(params.id ?? 0);
+  const propertyId = usePropertyId();
 
   const documents = useDocuments(propertyId);
   const remove = useDeleteDocument(propertyId);
@@ -104,12 +110,16 @@ function Jacket({ doc, onRemove }: { doc: Document; onRemove: () => void }) {
               Printing it again underneath says nothing twice. */}
           {doc.title && doc.title !== doc.original_filename && (
             <>
-              <span className="jacket__sep" aria-hidden="true">·</span>
+              <span className="jacket__sep" aria-hidden="true">
+                ·
+              </span>
               {doc.original_filename}
             </>
           )}
-          <span className="jacket__sep" aria-hidden="true">·</span>
-          {fileSize(doc.size_bytes)}
+          <span className="jacket__sep" aria-hidden="true">
+            ·
+          </span>
+          {bytes(doc.size_bytes)}
         </p>
         <p className="jacket__accession mono">
           <span className="stamped">Acc.</span> {doc.sha256.slice(0, 8)}
@@ -173,20 +183,9 @@ function Attach({
 
   return (
     <div className="attach">
-      <label className="sheet__filter">
-        <span className="sheet__filter-label stamped">Kind</span>
-        <select
-          className="entry entry--short"
-          value={kind}
-          onChange={(e) => setKind(e.target.value as DocumentKind)}
-        >
-          {KINDS.map((k) => (
-            <option key={k} value={k}>
-              {KIND_LABEL[k]}
-            </option>
-          ))}
-        </select>
-      </label>
+      <SheetFilter label="Kind">
+        <Select value={kind} onChange={setKind} options={KINDS} labels={KIND_LABEL} short />
+      </SheetFilter>
 
       <label className="attach__choose">
         <span className="attach__word stamped">Attach a document</span>
@@ -205,7 +204,9 @@ function Attach({
         <p className="attach__state" role="status">
           <span className="attach__filename mono">{filename}</span>
           {state === "filing" && <span className="attach__word stamped">filing</span>}
-          {state === "filed" && <span className="attach__word attach__word--done stamped">filed</span>}
+          {state === "filed" && (
+            <span className="attach__word attach__word--done stamped">filed</span>
+          )}
           {state === "already" && (
             <span className="attach__word attach__word--already stamped">already on file</span>
           )}
@@ -213,11 +214,4 @@ function Attach({
       )}
     </div>
   );
-}
-
-/** A size a person reads, from a count of bytes. */
-function fileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

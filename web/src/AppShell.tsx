@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { signOut } from "./api/queries";
+import { signOut } from "./api";
 
 /**
  * The desk and the label on the drawer.

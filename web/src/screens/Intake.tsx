@@ -1,21 +1,22 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 
-import { describeError } from "../api/client";
 import {
+  describeError,
   useConnectGmail,
   useDisconnectGmail,
   useEmailMessages,
   useIntakeStanding,
   useSyncNow,
-} from "../api/queries";
-import type { EmailMessage, EmailStatus, IntakeStanding } from "../api/types";
+  type EmailMessage,
+  type EmailStatus,
+  type IntakeStanding,
+} from "../api";
+import { DayRegister } from "../components/DayRegister";
 import { FieldRow } from "../components/FieldRow";
 import { Stamp, type StampState } from "../components/Stamp";
-import { ago, bytes, clock, dayKey, dayRule, hourMinute, plural, timestamp } from "../format";
+import { ago, bytes, clock, DASH, hourMinute, plural, timestamp } from "../format";
 import { Dispatch } from "./Dispatch";
-
-const DASH = "—";
 
 /** The mailbox's state and the word stamped on the card are one vocabulary. */
 const STATE_STAMP: Record<IntakeStanding["state"], StampState> = {
@@ -88,22 +89,25 @@ function Mailbox() {
       </header>
 
       {error && <p className="card__notice">{error}</p>}
-      {outcome && (
-        <Outcome outcome={outcome} onDismiss={() => setParams({}, { replace: true })} />
-      )}
+      {outcome && <Outcome outcome={outcome} onDismiss={() => setParams({}, { replace: true })} />}
       {data?.last_error && !error && <p className="card__notice">{data.last_error}</p>}
 
       {data && <Standing standing={data} />}
 
-      <Register
-        messages={messages.data?.items ?? []}
+      {/* Kept by day, because an inbound mail log is. */}
+      <DayRegister
+        eyebrow="Received"
+        entries={messages.data?.items ?? []}
+        keyOf={(message) => message.id}
+        at={(message) => message.received_at}
+        render={(message) => <Entry message={message} />}
         loading={messages.isPending}
         error={messages.isError ? describeError(messages.error) : null}
-        standing={data}
+        empty={emptyRegister(data)}
       />
 
       <footer className="card__foot">
-        <div className="intake__foot">
+        <div className="register__foot">
           <Tally counts={data?.counts ?? {}} />
           <Actions standing={data} />
         </div>
@@ -140,10 +144,10 @@ function Standing({ standing }: { standing: IntakeStanding }) {
   if (!standing.configured) {
     return (
       <div className="card__fields">
-        <p className="intake__empty">
+        <p className="register__empty">
           Email ingestion is not set up, so nothing is being collected. Fill these in and restart:
         </p>
-        <ul className="intake__missing mono">
+        <ul className="register__missing mono">
           {(standing.missing ?? []).map((key) => (
             <li key={key}>{key}</li>
           ))}
@@ -155,7 +159,7 @@ function Standing({ standing }: { standing: IntakeStanding }) {
   if (!standing.connected) {
     return (
       <div className="card__fields">
-        <p className="intake__empty">
+        <p className="register__empty">
           No mailbox is connected. Connect one and forwarded mail files itself.
         </p>
       </div>
@@ -219,10 +223,10 @@ function Tally({ counts }: { counts: Record<string, number> }) {
   if (held.length === 0) return null;
 
   return (
-    <p className="intake__tally">
+    <p className="register__tally">
       {held.map(([key, noun], i) => (
         <span key={key} className="intake__count">
-          {i > 0 && <span className="intake__separator"> · </span>}
+          {i > 0 && <span className="register__separator"> · </span>}
           <span className="mono">{counts[key]}</span> {noun}
         </span>
       ))}
@@ -244,8 +248,8 @@ function Actions({ standing }: { standing: IntakeStanding | null }) {
   const failure = connect.error ?? disconnect.error ?? sync.error;
 
   return (
-    <div className="intake__actions">
-      {failure && <p className="intake__failure">{describeError(failure)}</p>}
+    <div className="register__actions">
+      {failure && <p className="register__failure">{describeError(failure)}</p>}
       <div className="actions">
         {!standing.connected && (
           <button
@@ -289,11 +293,7 @@ function Actions({ standing }: { standing: IntakeStanding | null }) {
                 >
                   Disconnect for good
                 </button>
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => setConfirming(false)}
-                >
+                <button type="button" className="button" onClick={() => setConfirming(false)}>
                   Keep
                 </button>
               </>
@@ -310,55 +310,6 @@ function Actions({ standing }: { standing: IntakeStanding | null }) {
         )}
       </div>
     </div>
-  );
-}
-
-interface RegisterProps {
-  messages: EmailMessage[];
-  loading: boolean;
-  error: string | null;
-  standing: IntakeStanding | null;
-}
-
-/**
- * The receiving register.
- *
- * Kept by day, because an inbound mail log is: the date is a rule across the
- * page and every line under it carries only its time, so the times form a
- * column the eye runs down. Repeating the date on each line would say nothing
- * eleven times.
- */
-function Register({ messages, loading, error, standing }: RegisterProps) {
-  if (error) {
-    return (
-      <section className="register">
-        <p className="register__eyebrow stamped">Received</p>
-        <p className="intake__empty">{error}</p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="register">
-      <p className="register__eyebrow stamped">Received</p>
-
-      {loading && <p className="intake__empty">Reading the register…</p>}
-
-      {!loading && messages.length === 0 && (
-        <p className="intake__empty">{emptyRegister(standing)}</p>
-      )}
-
-      {groupByDay(messages).map(([day, entries]) => (
-        <div key={day} className="register__day">
-          <p className="register__rule">
-            <span className="register__date mono">{dayRule(entries[0]?.received_at ?? day)}</span>
-          </p>
-          {entries.map((message) => (
-            <Entry key={message.id} message={message} />
-          ))}
-        </div>
-      ))}
-    </section>
   );
 }
 
@@ -426,9 +377,7 @@ function Entry({ message }: { message: EmailMessage }) {
                       Open
                     </a>
                   ) : (
-                    <span className="enclosure__skipped">
-                      {att.skipped_reason || "not stored"}
-                    </span>
+                    <span className="enclosure__skipped">{att.skipped_reason || "not stored"}</span>
                   )}
                 </li>
               ))}
@@ -452,19 +401,4 @@ function Entry({ message }: { message: EmailMessage }) {
       )}
     </div>
   );
-}
-
-/** Groups the register by local day, newest first, preserving order within. */
-function groupByDay(messages: EmailMessage[]): [string, EmailMessage[]][] {
-  const days = new Map<string, EmailMessage[]>();
-  for (const message of messages) {
-    const key = dayKey(message.received_at);
-    const bucket = days.get(key);
-    if (bucket) {
-      bucket.push(message);
-    } else {
-      days.set(key, [message]);
-    }
-  }
-  return [...days.entries()];
 }

@@ -1,8 +1,7 @@
 import { Navigate, Route, Routes } from "react-router";
 
 import { AppShell } from "./AppShell";
-import { ApiError } from "./api/client";
-import { useMe } from "./api/queries";
+import { ApiError, useMe } from "./api";
 import { Properties } from "./screens/Properties";
 import { PropertyRecord } from "./screens/PropertyRecord";
 import { CashFlow } from "./screens/property/CashFlow";

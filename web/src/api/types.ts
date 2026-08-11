@@ -84,10 +84,6 @@ export interface Unit {
   active_lease_end_date?: string | null;
 }
 
-export interface UnitList {
-  items: Unit[];
-}
-
 /**
  * The writable half of a property.
  *
@@ -155,25 +151,11 @@ export interface Status {
 /* Documents ---------------------------------------------------------------- */
 
 export type DocumentKind =
-  | "lease"
-  | "insurance"
-  | "receipt"
-  | "statement"
-  | "tax"
-  | "photo"
-  | "correspondence"
-  | "other";
+  "lease" | "insurance" | "receipt" | "statement" | "tax" | "photo" | "correspondence" | "other";
 
 /** What a document can be filed against. Mirrors the CHECK in migration 0002. */
 export type LinkEntityType =
-  | "property"
-  | "unit"
-  | "transaction"
-  | "repair"
-  | "repair_event"
-  | "lease"
-  | "tenant"
-  | "vendor";
+  "property" | "unit" | "transaction" | "repair" | "repair_event" | "lease" | "tenant" | "vendor";
 
 export interface DocumentLink {
   entity_type: LinkEntityType;
@@ -415,12 +397,7 @@ export interface VendorList {
  * finished. Collapsing them shows a fresh clone a broken mailbox.
  */
 export type IntakeState =
-  | "watching"
-  | "lapsed"
-  | "degraded"
-  | "revoked"
-  | "not-connected"
-  | "not-configured";
+  "watching" | "lapsed" | "degraded" | "revoked" | "not-connected" | "not-configured";
 
 export interface IntakeStanding {
   configured: boolean;
@@ -446,13 +423,7 @@ export interface IntakeStanding {
 
 /** Every disposition the database's CHECK allows. M3 writes three of them. */
 export type EmailStatus =
-  | "received"
-  | "parsing"
-  | "needs_review"
-  | "applied"
-  | "rejected"
-  | "ignored"
-  | "failed";
+  "received" | "parsing" | "needs_review" | "applied" | "rejected" | "ignored" | "failed";
 
 export interface EmailAttachment {
   id: number;
@@ -491,12 +462,7 @@ export interface ConnectResponse {
 
 /* The alert channel ------------------------------------------------------ */
 
-export type ChannelState =
-  | "paired"
-  | "muted"
-  | "no-contact"
-  | "not-connected"
-  | "not-configured";
+export type ChannelState = "paired" | "muted" | "no-contact" | "not-connected" | "not-configured";
 
 export type Severity = "info" | "warning" | "critical";
 
