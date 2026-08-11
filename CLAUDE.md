@@ -273,8 +273,8 @@ assertion library. Store tests open a real SQLite file under `t.TempDir()`;
 - **Rate-limiter state is in memory** and does not survive a restart.
   Persisting it would put a write on every failed sign-in.
 - **TOTP is still deferred.** The `users.totp_secret` column carries no rows.
-- **`telegram_state.muted_until` is written by nothing.** `/mute` is an inbound
-  command and inbound commands are M6's. The column, the suppression in the
+- **Nothing calls `telegram.Store.Mute`,** so `telegram_state.muted_until` is
+  never set. `/mute` is an inbound command and inbound commands are M6's. The column, the suppression in the
   sender, and the MUTED stamp all exist and are tested; there is no way to set
   it yet, which is the right order — the thing that reads a state should exist
   before the thing that writes it.

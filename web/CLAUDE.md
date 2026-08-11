@@ -68,3 +68,8 @@ context narrowed to 320px applies text autosizing that a real iPhone does not,
 and will report failures that do not exist. Wait for `networkidle` **and**
 `document.fonts.ready` before measuring; the unstyled first paint is much
 wider than the real layout and produces phantom overflow.
+
+The browser for those checks is the Playwright MCP server, not a checked-in
+test suite — `web/` has no Playwright dependency and no config, and
+`.playwright-mcp/` in `.gitignore` is that server's scratch output. Run
+`make dev` first and drive it against Vite on :5174.
