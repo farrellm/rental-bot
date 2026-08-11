@@ -278,14 +278,8 @@ func validateUnits(units []unitInput) string {
 		}
 		seen[label] = struct{}{}
 
-		if u.Beds != nil && (*u.Beds < 0 || *u.Beds > 1000) {
-			return "Beds has to be between 0 and 1000."
-		}
-		if u.Baths != nil && (*u.Baths < 0 || *u.Baths > 1000) {
-			return "Baths has to be between 0 and 1000."
-		}
-		if u.Sqft != nil && (*u.Sqft < 0 || *u.Sqft > 10_000_000) {
-			return "Square feet has to be between 0 and 10,000,000."
+		if detail := validateRoomCounts(u.Beds, u.Baths, u.Sqft); detail != "" {
+			return detail
 		}
 	}
 	return ""

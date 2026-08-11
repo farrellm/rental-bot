@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"net/http"
 	"slices"
@@ -15,17 +14,12 @@ import (
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
 
-const (
-	defaultPageSize = 50
-	maxPageSize     = 200
-
-	// implicitUnitLabel names the unit a single-family property gets at
-	// creation. Every lease hangs off a unit (docs/DESIGN.md §3.2), so a
-	// property with no units would fork the query shape for the rest of the
-	// application. "Main" reads correctly on a house without pretending to be
-	// a street-facing unit number.
-	implicitUnitLabel = "Main"
-)
+// implicitUnitLabel names the unit a single-family property gets at creation.
+// Every lease hangs off a unit (docs/DESIGN.md §3.2), so a property with no
+// units would fork the query shape for the rest of the application. "Main"
+// reads correctly on a house without pretending to be a street-facing unit
+// number.
+const implicitUnitLabel = "Main"
 
 // propertyStatuses mirrors the CHECK constraint in migration 0001. The
 // database is the authority; this exists so a bad value is a 422 naming the
@@ -479,11 +473,6 @@ func (s *server) handleDeleteProperty(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// validationError carries a client-facing message out of a transaction.
-type validationError struct{ detail string }
-
-func (e validationError) Error() string { return e.detail }
-
 // validateProperty checks the rules the database cannot state for itself, and
 // returns a message naming what to fix.
 func validateProperty(nickname, addressLine1, status string, purchaseDate *string,
@@ -506,29 +495,13 @@ func validateProperty(nickname, addressLine1, status string, purchaseDate *strin
 	if purchaseDate != nil && !isCalendarDate(*purchaseDate) {
 		return "The purchase date has to be written as YYYY-MM-DD."
 	}
-	if beds != nil && (*beds < 0 || *beds > 1000) {
-		return "Beds has to be between 0 and 1000."
-	}
-	if baths != nil && (*baths < 0 || *baths > 1000) {
-		return "Baths has to be between 0 and 1000."
-	}
-	if sqft != nil && (*sqft < 0 || *sqft > 10_000_000) {
-		return "Square feet has to be between 0 and 10,000,000."
+	if detail := validateRoomCounts(beds, baths, sqft); detail != "" {
+		return detail
 	}
 	if yearBuilt != nil && (*yearBuilt < 1000 || *yearBuilt > 2200) {
 		return "The year built has to be between 1000 and 2200."
 	}
 	return ""
-}
-
-// isCalendarDate reports whether s is a YYYY-MM-DD date that exists.
-//
-// Dates that come off documents are stored exactly as written, with no
-// timezone invented for them (docs/DESIGN.md §3), so this checks the spelling
-// rather than parsing into a time.Time and back.
-func isCalendarDate(s string) bool {
-	t, err := time.Parse(time.DateOnly, s)
-	return err == nil && t.Format(time.DateOnly) == s
 }
 
 func (s *server) propertyReadError(w http.ResponseWriter, r *http.Request, err error) {
@@ -555,62 +528,7 @@ func (s *server) propertyWriteError(w http.ResponseWriter, r *http.Request, err 
 	}
 }
 
-// pageSize reads the limit query parameter.
-func pageSize(w http.ResponseWriter, r *http.Request) (int, bool) {
-	raw := r.URL.Query().Get("limit")
-	if raw == "" {
-		return defaultPageSize, true
-	}
-	n, err := strconv.Atoi(raw)
-	if err != nil || n < 1 {
-		WriteProblem(w, r, http.StatusBadRequest, "limit has to be a positive whole number.")
-		return 0, false
-	}
-	return min(n, maxPageSize), true
-}
-
-var errBadCursor = errors.New("httpapi: malformed cursor")
-
-// encodeCursor names the last row of a page by its sort key.
-//
-// Every keyset in this API sorts on a text column and breaks the tie on id, so
-// the cursor carries both: properties sort by nickname and documents by
-// created_at, and neither is unique. A cursor that carried only the first would
-// skip or repeat rows wherever two rows share it.
-func encodeCursor(sortKey string, id int64) string {
-	return base64.RawURLEncoding.EncodeToString(
-		[]byte(sortKey + "\x00" + strconv.FormatInt(id, 10)))
-}
-
-func decodeCursor(cursor string) (string, int64, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(cursor)
-	if err != nil {
-		return "", 0, errBadCursor
-	}
-	sortKey, rest, found := strings.Cut(string(raw), "\x00")
-	if !found {
-		return "", 0, errBadCursor
-	}
-	id, err := strconv.ParseInt(rest, 10, 64)
-	if err != nil {
-		return "", 0, errBadCursor
-	}
-	return sortKey, id, nil
-}
-
 // timestamp is now, spelled the way this schema spells every timestamp. Unlike
 // the subsystems with an injectable clock, a request handler has no clock to
 // inject -- it always means this instant.
 func timestamp() string { return domain.Stamp(time.Now()) }
-
-// pathID reads a numeric path parameter, reporting a bad one and returning
-// false. A non-numeric id is a 404 rather than a 400: /properties/banana names
-// no property, and saying so is enough.
-func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
-	id, err := strconv.ParseInt(r.PathValue(name), 10, 64)
-	if err != nil || id < 1 {
-		WriteProblem(w, r, http.StatusNotFound, "No such record.")
-		return 0, false
-	}
-	return id, true
-}

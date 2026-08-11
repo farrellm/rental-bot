@@ -64,3 +64,31 @@ func describeDecodeError(err error) string {
 	}
 	return "The request body could not be read."
 }
+
+// pathID reads a numeric path parameter, reporting a bad one and returning
+// false. A non-numeric id is a 404 rather than a 400: /properties/banana names
+// no property, and saying so is enough.
+func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue(name), 10, 64)
+	if err != nil || id < 1 {
+		WriteProblem(w, r, http.StatusNotFound, "No such record.")
+		return 0, false
+	}
+	return id, true
+}
+
+// optionalID reads a numeric form field that may be absent. It is the multipart
+// counterpart of pathID: an upload names what it is filed against in the form
+// rather than in the path.
+func optionalID(w http.ResponseWriter, r *http.Request, raw, name string) (*int64, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, true
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id < 1 {
+		WriteProblem(w, r, http.StatusUnprocessableEntity, name+" has to name a record.")
+		return nil, false
+	}
+	return &id, true
+}

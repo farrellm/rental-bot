@@ -388,7 +388,7 @@ func (s *server) handleCreateRepairEvent(w http.ResponseWriter, r *http.Request)
 		CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
-		if isForeignKeyError(err) {
+		if store.ForeignKey(err) {
 			WriteProblem(w, r, http.StatusUnprocessableEntity, "No document has that id.")
 			return
 		}
@@ -491,7 +491,7 @@ func (s *server) repairWriteError(w http.ResponseWriter, r *http.Request, err er
 		WriteProblem(w, r, http.StatusUnprocessableEntity, invalid.detail)
 	case store.NotFound(err):
 		WriteProblem(w, r, http.StatusNotFound, "No such repair.")
-	case isForeignKeyError(err):
+	case store.ForeignKey(err):
 		WriteProblem(w, r, http.StatusUnprocessableEntity,
 			"One of the records this repair points at does not exist.")
 	default:

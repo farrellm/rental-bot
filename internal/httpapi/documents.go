@@ -636,20 +636,6 @@ func parseLinkFields(w http.ResponseWriter, r *http.Request, fields map[string]s
 	return &linkRequest{EntityType: entityType, EntityID: id}, true
 }
 
-// optionalID reads a numeric form field that may be absent.
-func optionalID(w http.ResponseWriter, r *http.Request, raw, name string) (*int64, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, true
-	}
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id < 1 {
-		WriteProblem(w, r, http.StatusUnprocessableEntity, name+" has to name a record.")
-		return nil, false
-	}
-	return &id, true
-}
-
 // contentType settles on a type for stored content.
 //
 // The browser's declared type is a hint from the client and is not trusted

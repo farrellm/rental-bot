@@ -377,7 +377,7 @@ func (s *server) handleAddLeaseTenant(w http.ResponseWriter, r *http.Request) {
 	case store.Conflict(err):
 		WriteProblem(w, r, http.StatusConflict, "That tenant is already on this lease.")
 		return
-	case isForeignKeyError(err):
+	case store.ForeignKey(err):
 		WriteProblem(w, r, http.StatusUnprocessableEntity, "No tenant has that id.")
 		return
 	case err != nil:
@@ -500,7 +500,7 @@ func (s *server) leaseWriteError(w http.ResponseWriter, r *http.Request, err err
 		WriteProblem(w, r, http.StatusUnprocessableEntity, invalid.detail)
 	case store.NotFound(err):
 		WriteProblem(w, r, http.StatusNotFound, "No such lease.")
-	case isForeignKeyError(err):
+	case store.ForeignKey(err):
 		WriteProblem(w, r, http.StatusUnprocessableEntity,
 			"One of the records this lease points at does not exist.")
 	default:

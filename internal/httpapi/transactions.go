@@ -427,21 +427,13 @@ func (s *server) transactionWriteError(w http.ResponseWriter, r *http.Request, e
 		WriteProblem(w, r, http.StatusUnprocessableEntity, invalid.detail)
 	case store.NotFound(err):
 		WriteProblem(w, r, http.StatusNotFound, "No such entry.")
-	case isForeignKeyError(err):
+	case store.ForeignKey(err):
 		WriteProblem(w, r, http.StatusUnprocessableEntity,
 			"One of the records this entry points at does not exist.")
 	default:
 		loggerFrom(r.Context()).Error("write transaction", "error", err)
 		WriteProblem(w, r, http.StatusInternalServerError, "Could not save the entry.")
 	}
-}
-
-// isForeignKeyError reports a reference to a row that is not there.
-//
-// modernc.org/sqlite reports constraint failures as a message rather than a
-// typed error, the same way store.Conflict has to match on text.
-func isForeignKeyError(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "FOREIGN KEY constraint failed")
 }
 
 // boolToInt spells a Go bool the way a STRICT table stores one.
