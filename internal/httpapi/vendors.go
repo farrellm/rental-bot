@@ -1,12 +1,10 @@
 package httpapi
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
 
@@ -36,6 +34,9 @@ func newVendorResponse(v sqlc.Vendor) vendorResponse {
 		CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
 	}
 }
+
+// recVendor names a vendor for the shared error answers.
+var recVendor = record{noun: "vendor"}
 
 func (s *server) routeVendors(mux *http.ServeMux) {
 	route(mux, "/api/v1/vendors", methods{
@@ -72,7 +73,7 @@ func (s *server) handleGetVendor(w http.ResponseWriter, r *http.Request) {
 	}
 	vendor, err := s.repo.Read().GetVendor(r.Context(), id)
 	if err != nil {
-		s.vendorReadError(w, r, err)
+		s.readError(w, r, recVendor, err)
 		return
 	}
 	writeJSON(w, r, http.StatusOK, newVendorResponse(vendor))
@@ -136,16 +137,14 @@ func (s *server) handleUpdateVendor(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		for _, apply := range []func() error{
-			func() error { return p.required("name", &current.Name) },
-			func() error { return p.required("trade", &current.Trade) },
-			func() error { return p.required("phone", &current.Phone) },
-			func() error { return p.required("email", &current.Email) },
-			func() error { return p.required("notes", &current.Notes) },
-		} {
-			if err := apply(); err != nil {
-				return validationError{err.Error()}
-			}
+		if err := p.apply(
+			required("name", &current.Name),
+			required("trade", &current.Trade),
+			required("phone", &current.Phone),
+			required("email", &current.Email),
+			required("notes", &current.Notes),
+		); err != nil {
+			return err
 		}
 
 		current.Name = strings.TrimSpace(current.Name)
@@ -165,7 +164,7 @@ func (s *server) handleUpdateVendor(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if err != nil {
-		s.vendorWriteError(w, r, err)
+		s.writeError(w, r, recVendor, err)
 		return
 	}
 	writeJSON(w, r, http.StatusOK, newVendorResponse(updated))
@@ -204,26 +203,4 @@ func validateContact(name, noun string) string {
 		return "The name is longer than 120 characters."
 	}
 	return ""
-}
-
-func (s *server) vendorReadError(w http.ResponseWriter, r *http.Request, err error) {
-	if store.NotFound(err) {
-		WriteProblem(w, r, http.StatusNotFound, "No such vendor.")
-		return
-	}
-	loggerFrom(r.Context()).Error("read vendor", "error", err)
-	WriteProblem(w, r, http.StatusInternalServerError, "Could not read the vendor.")
-}
-
-func (s *server) vendorWriteError(w http.ResponseWriter, r *http.Request, err error) {
-	var invalid validationError
-	switch {
-	case errors.As(err, &invalid):
-		WriteProblem(w, r, http.StatusUnprocessableEntity, invalid.detail)
-	case store.NotFound(err):
-		WriteProblem(w, r, http.StatusNotFound, "No such vendor.")
-	default:
-		loggerFrom(r.Context()).Error("write vendor", "error", err)
-		WriteProblem(w, r, http.StatusInternalServerError, "Could not save the vendor.")
-	}
 }

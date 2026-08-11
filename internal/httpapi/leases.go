@@ -70,6 +70,9 @@ func newLeaseResponse(l sqlc.Lease, unitLabel string) leaseResponse {
 	}
 }
 
+// recLease names a lease for the shared error answers.
+var recLease = record{noun: "lease"}
+
 func (s *server) routeLeases(mux *http.ServeMux) {
 	route(mux, "/api/v1/properties/{id}/leases", methods{
 		http.MethodGet:  s.guarded(s.handleListLeases),
@@ -94,7 +97,7 @@ func (s *server) handleListLeases(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if _, err := s.repo.Read().GetProperty(ctx, propertyID); err != nil {
-		s.propertyReadError(w, r, err)
+		s.readError(w, r, recProperty, err)
 		return
 	}
 
@@ -125,7 +128,7 @@ func (s *server) handleGetLease(w http.ResponseWriter, r *http.Request) {
 
 	row, err := s.repo.Read().GetLeaseWithUnit(ctx, id)
 	if err != nil {
-		s.leaseReadError(w, r, err)
+		s.readError(w, r, recLease, err)
 		return
 	}
 	tenants, err := s.repo.Read().ListLeaseTenants(ctx, id)
@@ -256,22 +259,20 @@ func (s *server) handleUpdateLease(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
-		for _, apply := range []func() error{
-			func() error { return p.required("unit_id", &current.UnitID) },
-			func() error { return p.required("start_date", &current.StartDate) },
-			func() error { return p.required("rent_cents", &current.RentCents) },
-			func() error { return p.required("status", &current.Status) },
-			func() error { return p.required("notes", &current.Notes) },
-			func() error { return p.nullable("end_date", &current.EndDate) },
-			func() error { return p.nullable("deposit_cents", &current.DepositCents) },
-			func() error { return p.nullable("due_day", &current.DueDay) },
-			func() error { return p.nullable("late_fee_cents", &current.LateFeeCents) },
-			func() error { return p.nullable("renewal_of_lease_id", &current.RenewalOfLeaseID) },
-			func() error { return p.nullable("document_id", &current.DocumentID) },
-		} {
-			if err := apply(); err != nil {
-				return validationError{err.Error()}
-			}
+		if err := p.apply(
+			required("unit_id", &current.UnitID),
+			required("start_date", &current.StartDate),
+			required("rent_cents", &current.RentCents),
+			required("status", &current.Status),
+			required("notes", &current.Notes),
+			nullable("end_date", &current.EndDate),
+			nullable("deposit_cents", &current.DepositCents),
+			nullable("due_day", &current.DueDay),
+			nullable("late_fee_cents", &current.LateFeeCents),
+			nullable("renewal_of_lease_id", &current.RenewalOfLeaseID),
+			nullable("document_id", &current.DocumentID),
+		); err != nil {
+			return err
 		}
 
 		if detail := validateLease(current.StartDate, current.EndDate, current.Status,
@@ -364,7 +365,7 @@ func (s *server) handleAddLeaseTenant(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if _, err := s.repo.Read().GetLease(ctx, leaseID); err != nil {
-		s.leaseReadError(w, r, err)
+		s.readError(w, r, recLease, err)
 		return
 	}
 
@@ -481,30 +482,17 @@ func validateLease(startDate string, endDate *string, status string,
 	return ""
 }
 
-func (s *server) leaseReadError(w http.ResponseWriter, r *http.Request, err error) {
-	if store.NotFound(err) {
-		WriteProblem(w, r, http.StatusNotFound, "No such lease.")
-		return
-	}
-	loggerFrom(r.Context()).Error("read lease", "error", err)
-	WriteProblem(w, r, http.StatusInternalServerError, "Could not read the lease.")
-}
-
+// leaseWriteError adds the two failures particular to a lease -- the overlap
+// that would make occupancy ambiguous, and a reference to a unit or tenant that
+// is not there -- and leaves the rest to the answer every entity shares.
 func (s *server) leaseWriteError(w http.ResponseWriter, r *http.Request, err error) {
-	var invalid validationError
 	switch {
 	case errors.Is(err, errOverlappingLease):
 		WriteProblem(w, r, http.StatusConflict,
 			"This unit already has a lease covering those dates. End that one first.")
-	case errors.As(err, &invalid):
-		WriteProblem(w, r, http.StatusUnprocessableEntity, invalid.detail)
-	case store.NotFound(err):
-		WriteProblem(w, r, http.StatusNotFound, "No such lease.")
 	case store.ForeignKey(err):
-		WriteProblem(w, r, http.StatusUnprocessableEntity,
-			"One of the records this lease points at does not exist.")
+		s.danglingReference(w, r, recLease)
 	default:
-		loggerFrom(r.Context()).Error("write lease", "error", err)
-		WriteProblem(w, r, http.StatusInternalServerError, "Could not save the lease.")
+		s.writeError(w, r, recLease, err)
 	}
 }

@@ -92,6 +92,9 @@ func newDocumentResponse(d sqlc.Document) documentResponse {
 	}
 }
 
+// recDocument names a document for the shared error answers.
+var recDocument = record{noun: "document"}
+
 func (s *server) routeDocuments(mux *http.ServeMux) {
 	route(mux, "/api/v1/documents", methods{
 		http.MethodPost: s.guarded(s.handleUploadDocument),
@@ -202,7 +205,7 @@ func (s *server) handleUploadDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	if propertyID != nil {
 		if _, err := s.repo.Read().GetProperty(ctx, *propertyID); err != nil {
-			s.propertyReadError(w, r, err)
+			s.readError(w, r, recProperty, err)
 			return
 		}
 	}
@@ -313,7 +316,7 @@ func (s *server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if _, err := s.repo.Read().GetProperty(ctx, propertyID); err != nil {
-		s.propertyReadError(w, r, err)
+		s.readError(w, r, recProperty, err)
 		return
 	}
 
@@ -366,7 +369,7 @@ func (s *server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 
 	doc, err := s.repo.Read().GetDocument(ctx, id)
 	if err != nil {
-		s.documentReadError(w, r, err)
+		s.readError(w, r, recDocument, err)
 		return
 	}
 	links, err := s.repo.Read().ListDocumentLinks(ctx, id)
@@ -402,7 +405,7 @@ func (s *server) handleDocumentContent(w http.ResponseWriter, r *http.Request) {
 
 	doc, err := s.repo.Read().GetDocument(ctx, id)
 	if err != nil {
-		s.documentReadError(w, r, err)
+		s.readError(w, r, recDocument, err)
 		return
 	}
 
@@ -470,17 +473,13 @@ func (s *server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
-		if err := p.nullable("property_id", &current.PropertyID); err != nil {
-			return validationError{err.Error()}
-		}
-		for _, apply := range []func() error{
-			func() error { return p.required("kind", &current.Kind) },
-			func() error { return p.required("title", &current.Title) },
-			func() error { return p.required("original_filename", &current.OriginalFilename) },
-		} {
-			if err := apply(); err != nil {
-				return validationError{err.Error()}
-			}
+		if err := p.apply(
+			nullable("property_id", &current.PropertyID),
+			required("kind", &current.Kind),
+			required("title", &current.Title),
+			required("original_filename", &current.OriginalFilename),
+		); err != nil {
+			return err
 		}
 
 		current.Title = strings.TrimSpace(current.Title)
@@ -511,7 +510,7 @@ func (s *server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if err != nil {
-		s.documentWriteError(w, r, err)
+		s.writeError(w, r, recDocument, err)
 		return
 	}
 	writeJSON(w, r, http.StatusOK, newDocumentResponse(updated))
@@ -568,7 +567,7 @@ func (s *server) handleLinkDocument(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if _, err := s.repo.Read().GetDocument(ctx, id); err != nil {
-		s.documentReadError(w, r, err)
+		s.readError(w, r, recDocument, err)
 		return
 	}
 
@@ -670,26 +669,4 @@ func userID(r *http.Request) *int64 {
 		return nil
 	}
 	return &user.ID
-}
-
-func (s *server) documentReadError(w http.ResponseWriter, r *http.Request, err error) {
-	if store.NotFound(err) {
-		WriteProblem(w, r, http.StatusNotFound, "No such document.")
-		return
-	}
-	loggerFrom(r.Context()).Error("read document", "error", err)
-	WriteProblem(w, r, http.StatusInternalServerError, "Could not read the document.")
-}
-
-func (s *server) documentWriteError(w http.ResponseWriter, r *http.Request, err error) {
-	var invalid validationError
-	switch {
-	case errors.As(err, &invalid):
-		WriteProblem(w, r, http.StatusUnprocessableEntity, invalid.detail)
-	case store.NotFound(err):
-		WriteProblem(w, r, http.StatusNotFound, "No such document.")
-	default:
-		loggerFrom(r.Context()).Error("write document", "error", err)
-		WriteProblem(w, r, http.StatusInternalServerError, "Could not save the document.")
-	}
 }

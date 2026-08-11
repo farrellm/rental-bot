@@ -75,6 +75,10 @@ func newTransactionResponse(t sqlc.Transaction) transactionResponse {
 	}
 }
 
+// recTransaction names a ledger row. The screen calls it an entry and the
+// table calls it a transaction; both readers get their own word.
+var recTransaction = record{noun: "entry", table: "transaction"}
+
 func (s *server) routeTransactions(mux *http.ServeMux) {
 	route(mux, "/api/v1/properties/{id}/transactions", methods{
 		http.MethodGet:  s.guarded(s.handleListTransactions),
@@ -144,7 +148,7 @@ func (s *server) handleListTransactions(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 
 	if _, err := s.repo.Read().GetProperty(ctx, propertyID); err != nil {
-		s.propertyReadError(w, r, err)
+		s.readError(w, r, recProperty, err)
 		return
 	}
 
@@ -227,7 +231,7 @@ func (s *server) handleGetTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	entry, err := s.repo.Read().GetTransaction(r.Context(), id)
 	if err != nil {
-		s.transactionReadError(w, r, err)
+		s.readError(w, r, recTransaction, err)
 		return
 	}
 	writeJSON(w, r, http.StatusOK, newTransactionResponse(entry))
@@ -267,7 +271,7 @@ func (s *server) handleCreateTransaction(w http.ResponseWriter, r *http.Request)
 
 	ctx := r.Context()
 	if _, err := s.repo.Read().GetProperty(ctx, propertyID); err != nil {
-		s.propertyReadError(w, r, err)
+		s.readError(w, r, recProperty, err)
 		return
 	}
 
@@ -330,23 +334,21 @@ func (s *server) handleUpdateTransaction(w http.ResponseWriter, r *http.Request)
 		}
 
 		needsReview := current.NeedsReview == 1
-		for _, apply := range []func() error{
-			func() error { return p.required("occurred_on", &current.OccurredOn) },
-			func() error { return p.required("amount_cents", &current.AmountCents) },
-			func() error { return p.required("category", &current.Category) },
-			func() error { return p.required("description", &current.Description) },
-			func() error { return p.required("counterparty", &current.Counterparty) },
-			func() error { return p.required("payment_method", &current.PaymentMethod) },
-			func() error { return p.required("needs_review", &needsReview) },
-			func() error { return p.nullable("unit_id", &current.UnitID) },
-			func() error { return p.nullable("lease_id", &current.LeaseID) },
-			func() error { return p.nullable("repair_id", &current.RepairID) },
-			func() error { return p.nullable("vendor_id", &current.VendorID) },
-			func() error { return p.nullable("document_id", &current.DocumentID) },
-		} {
-			if err := apply(); err != nil {
-				return validationError{err.Error()}
-			}
+		if err := p.apply(
+			required("occurred_on", &current.OccurredOn),
+			required("amount_cents", &current.AmountCents),
+			required("category", &current.Category),
+			required("description", &current.Description),
+			required("counterparty", &current.Counterparty),
+			required("payment_method", &current.PaymentMethod),
+			required("needs_review", &needsReview),
+			nullable("unit_id", &current.UnitID),
+			nullable("lease_id", &current.LeaseID),
+			nullable("repair_id", &current.RepairID),
+			nullable("vendor_id", &current.VendorID),
+			nullable("document_id", &current.DocumentID),
+		); err != nil {
+			return err
 		}
 
 		if detail := validateTransaction(current.OccurredOn, current.Category); detail != "" {
@@ -411,29 +413,15 @@ func validateTransaction(occurredOn, category string) string {
 	return ""
 }
 
-func (s *server) transactionReadError(w http.ResponseWriter, r *http.Request, err error) {
-	if store.NotFound(err) {
-		WriteProblem(w, r, http.StatusNotFound, "No such entry.")
+// transactionWriteError adds the reference a ledger entry can get wrong -- a
+// property, unit, lease or vendor that is not there -- and leaves the rest to
+// the shared answer.
+func (s *server) transactionWriteError(w http.ResponseWriter, r *http.Request, err error) {
+	if store.ForeignKey(err) {
+		s.danglingReference(w, r, recTransaction)
 		return
 	}
-	loggerFrom(r.Context()).Error("read transaction", "error", err)
-	WriteProblem(w, r, http.StatusInternalServerError, "Could not read the entry.")
-}
-
-func (s *server) transactionWriteError(w http.ResponseWriter, r *http.Request, err error) {
-	var invalid validationError
-	switch {
-	case errors.As(err, &invalid):
-		WriteProblem(w, r, http.StatusUnprocessableEntity, invalid.detail)
-	case store.NotFound(err):
-		WriteProblem(w, r, http.StatusNotFound, "No such entry.")
-	case store.ForeignKey(err):
-		WriteProblem(w, r, http.StatusUnprocessableEntity,
-			"One of the records this entry points at does not exist.")
-	default:
-		loggerFrom(r.Context()).Error("write transaction", "error", err)
-		WriteProblem(w, r, http.StatusInternalServerError, "Could not save the entry.")
-	}
+	s.writeError(w, r, recTransaction, err)
 }
 
 // boolToInt spells a Go bool the way a STRICT table stores one.

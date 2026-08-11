@@ -87,6 +87,9 @@ func newPropertyResponse(p sqlc.Property) propertyResponse {
 	}
 }
 
+// recProperty names a property for the shared error answers.
+var recProperty = record{noun: "property"}
+
 func (s *server) routeProperties(mux *http.ServeMux) {
 	route(mux, "/api/v1/properties", methods{
 		http.MethodGet:  s.guarded(s.handleListProperties),
@@ -193,7 +196,7 @@ func (s *server) handleGetProperty(w http.ResponseWriter, r *http.Request) {
 
 	property, err := s.repo.Read().GetProperty(ctx, id)
 	if err != nil {
-		s.propertyReadError(w, r, err)
+		s.readError(w, r, recProperty, err)
 		return
 	}
 	// The detail carries occupancy, so the Overview tab can say which units
@@ -421,27 +424,25 @@ func (s *server) handleUpdateProperty(w http.ResponseWriter, r *http.Request) {
 }
 
 func applyPropertyPatch(p patch, into *sqlc.Property) error {
-	for _, apply := range []func() error{
-		func() error { return p.required("nickname", &into.Nickname) },
-		func() error { return p.required("address_line1", &into.AddressLine1) },
-		func() error { return p.required("address_line2", &into.AddressLine2) },
-		func() error { return p.required("city", &into.City) },
-		func() error { return p.required("state", &into.State) },
-		func() error { return p.required("postal_code", &into.PostalCode) },
-		func() error { return p.required("county", &into.County) },
-		func() error { return p.required("status", &into.Status) },
-		func() error { return p.required("notes", &into.Notes) },
-		func() error { return p.nullable("purchase_date", &into.PurchaseDate) },
-		func() error { return p.nullable("purchase_price_cents", &into.PurchasePriceCents) },
-		func() error { return p.nullable("beds", &into.Beds) },
-		func() error { return p.nullable("baths", &into.Baths) },
-		func() error { return p.nullable("sqft", &into.Sqft) },
-		func() error { return p.nullable("year_built", &into.YearBuilt) },
-		func() error { return p.nullable("zpid", &into.Zpid) },
-	} {
-		if err := apply(); err != nil {
-			return validationError{err.Error()}
-		}
+	if err := p.apply(
+		required("nickname", &into.Nickname),
+		required("address_line1", &into.AddressLine1),
+		required("address_line2", &into.AddressLine2),
+		required("city", &into.City),
+		required("state", &into.State),
+		required("postal_code", &into.PostalCode),
+		required("county", &into.County),
+		required("status", &into.Status),
+		required("notes", &into.Notes),
+		nullable("purchase_date", &into.PurchaseDate),
+		nullable("purchase_price_cents", &into.PurchasePriceCents),
+		nullable("beds", &into.Beds),
+		nullable("baths", &into.Baths),
+		nullable("sqft", &into.Sqft),
+		nullable("year_built", &into.YearBuilt),
+		nullable("zpid", &into.Zpid),
+	); err != nil {
+		return err
 	}
 
 	into.Nickname = strings.TrimSpace(into.Nickname)
@@ -504,31 +505,17 @@ func validateProperty(nickname, addressLine1, status string, purchaseDate *strin
 	return ""
 }
 
-func (s *server) propertyReadError(w http.ResponseWriter, r *http.Request, err error) {
-	if store.NotFound(err) {
-		WriteProblem(w, r, http.StatusNotFound, "No such property.")
-		return
-	}
-	loggerFrom(r.Context()).Error("read property", "error", err)
-	WriteProblem(w, r, http.StatusInternalServerError, "Could not read the property.")
-}
-
-func (s *server) propertyWriteError(w http.ResponseWriter, r *http.Request, err error) {
-	var invalid validationError
-	switch {
-	case errors.As(err, &invalid):
-		WriteProblem(w, r, http.StatusUnprocessableEntity, invalid.detail)
-	case store.NotFound(err):
-		WriteProblem(w, r, http.StatusNotFound, "No such property.")
-	case store.Conflict(err):
-		WriteProblem(w, r, http.StatusConflict, "That would collide with a record already on file.")
-	default:
-		loggerFrom(r.Context()).Error("write property", "error", err)
-		WriteProblem(w, r, http.StatusInternalServerError, "Could not save the property.")
-	}
-}
-
 // timestamp is now, spelled the way this schema spells every timestamp. Unlike
 // the subsystems with an injectable clock, a request handler has no clock to
 // inject -- it always means this instant.
 func timestamp() string { return domain.Stamp(time.Now()) }
+
+// propertyWriteError adds the one conflict a property has of its own; the rest
+// of what a write can fail on is answered the same way for every entity.
+func (s *server) propertyWriteError(w http.ResponseWriter, r *http.Request, err error) {
+	if store.Conflict(err) {
+		WriteProblem(w, r, http.StatusConflict, "That would collide with a record already on file.")
+		return
+	}
+	s.writeError(w, r, recProperty, err)
+}

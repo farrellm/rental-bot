@@ -12,7 +12,6 @@ import (
 	"github.com/farrellm/rental-bot/internal/auth"
 	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/gmail"
-	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
 
@@ -91,6 +90,10 @@ type emailMessageList struct {
 	Items      []emailMessageResponse `json:"items"`
 	NextCursor string                 `json:"next_cursor,omitempty"`
 }
+
+// recEmailMessage names an ingested message. "email message" is the table,
+// and on the intake screen it is just the message.
+var recEmailMessage = record{noun: "message", table: "email message"}
 
 func (s *server) routeIntake(mux *http.ServeMux) {
 	// The push endpoint is outside /api/v1 and outside the session: Pub/Sub has
@@ -492,7 +495,7 @@ func (s *server) handleGetEmailMessage(w http.ResponseWriter, r *http.Request) {
 
 	msg, err := s.repo.Read().GetEmailMessage(ctx, id)
 	if err != nil {
-		s.emailMessageReadError(w, r, err)
+		s.readError(w, r, recEmailMessage, err)
 		return
 	}
 	attachments, err := s.repo.Read().ListEmailAttachments(ctx, id)
@@ -525,7 +528,7 @@ func (s *server) handleEmailMessageRaw(w http.ResponseWriter, r *http.Request) {
 
 	msg, err := s.repo.Read().GetEmailMessage(ctx, id)
 	if err != nil {
-		s.emailMessageReadError(w, r, err)
+		s.readError(w, r, recEmailMessage, err)
 		return
 	}
 	if msg.RawPath == "" {
@@ -550,15 +553,6 @@ func (s *server) handleEmailMessageRaw(w http.ResponseWriter, r *http.Request) {
 		`attachment; filename="`+msg.GmailMessageID+`.eml"`)
 
 	http.ServeContent(w, r, msg.GmailMessageID+".eml", domain.ParseStamp(msg.UpdatedAt), f)
-}
-
-func (s *server) emailMessageReadError(w http.ResponseWriter, r *http.Request, err error) {
-	if store.NotFound(err) {
-		WriteProblem(w, r, http.StatusNotFound, "No such message.")
-		return
-	}
-	loggerFrom(r.Context()).Error("read email message", "error", err)
-	WriteProblem(w, r, http.StatusInternalServerError, "Could not read the message.")
 }
 
 func newEmailMessageResponse(row sqlc.EmailMessage) emailMessageResponse {

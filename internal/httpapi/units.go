@@ -72,6 +72,9 @@ type unitList struct {
 	Items []unitResponse `json:"items"`
 }
 
+// recUnit names a unit for the shared error answers.
+var recUnit = record{noun: "unit"}
+
 func (s *server) handleListUnits(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "id")
 	if !ok {
@@ -82,7 +85,7 @@ func (s *server) handleListUnits(w http.ResponseWriter, r *http.Request) {
 	// The property is read first so a missing one is a 404 rather than an
 	// empty list, which would look like a property with no units.
 	if _, err := s.repo.Read().GetProperty(ctx, id); err != nil {
-		s.propertyReadError(w, r, err)
+		s.readError(w, r, recProperty, err)
 		return
 	}
 
@@ -113,7 +116,7 @@ func (s *server) handleCreateUnit(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	if _, err := s.repo.Read().GetProperty(ctx, propertyID); err != nil {
-		s.propertyReadError(w, r, err)
+		s.readError(w, r, recProperty, err)
 		return
 	}
 
@@ -163,17 +166,13 @@ func (s *server) handleUpdateUnit(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
-		if err := p.required("label", &current.Label); err != nil {
-			return validationError{err.Error()}
-		}
-		for _, apply := range []func() error{
-			func() error { return p.nullable("beds", &current.Beds) },
-			func() error { return p.nullable("baths", &current.Baths) },
-			func() error { return p.nullable("sqft", &current.Sqft) },
-		} {
-			if err := apply(); err != nil {
-				return validationError{err.Error()}
-			}
+		if err := p.apply(
+			required("label", &current.Label),
+			nullable("beds", &current.Beds),
+			nullable("baths", &current.Baths),
+			nullable("sqft", &current.Sqft),
+		); err != nil {
+			return err
 		}
 
 		current.Label = strings.TrimSpace(current.Label)
@@ -246,19 +245,14 @@ func (s *server) handleDeleteUnit(w http.ResponseWriter, r *http.Request) {
 
 var errLastUnit = errors.New("httpapi: a property keeps at least one unit")
 
+// unitWriteError adds the one conflict a unit has of its own; everything else
+// a write can fail on is answered the same way for every entity.
 func (s *server) unitWriteError(w http.ResponseWriter, r *http.Request, err error) {
-	var invalid validationError
-	switch {
-	case errors.As(err, &invalid):
-		WriteProblem(w, r, http.StatusUnprocessableEntity, invalid.detail)
-	case store.NotFound(err):
-		WriteProblem(w, r, http.StatusNotFound, "No such unit.")
-	case store.Conflict(err):
+	if store.Conflict(err) {
 		WriteProblem(w, r, http.StatusConflict, "This property already has a unit with that label.")
-	default:
-		loggerFrom(r.Context()).Error("write unit", "error", err)
-		WriteProblem(w, r, http.StatusInternalServerError, "Could not save the unit.")
+		return
 	}
+	s.writeError(w, r, recUnit, err)
 }
 
 // validateUnits checks a set of units that will share one property, and
