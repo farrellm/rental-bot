@@ -88,9 +88,7 @@ function Mailbox() {
       </header>
 
       {error && <p className="card__notice">{error}</p>}
-      {outcome && (
-        <Outcome outcome={outcome} onDismiss={() => setParams({}, { replace: true })} />
-      )}
+      {outcome && <Outcome outcome={outcome} onDismiss={() => setParams({}, { replace: true })} />}
       {data?.last_error && !error && <p className="card__notice">{data.last_error}</p>}
 
       {data && <Standing standing={data} />}
@@ -289,11 +287,7 @@ function Actions({ standing }: { standing: IntakeStanding | null }) {
                 >
                   Disconnect for good
                 </button>
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => setConfirming(false)}
-                >
+                <button type="button" className="button" onClick={() => setConfirming(false)}>
                   Keep
                 </button>
               </>
@@ -426,9 +420,7 @@ function Entry({ message }: { message: EmailMessage }) {
                       Open
                     </a>
                   ) : (
-                    <span className="enclosure__skipped">
-                      {att.skipped_reason || "not stored"}
-                    </span>
+                    <span className="enclosure__skipped">{att.skipped_reason || "not stored"}</span>
                   )}
                 </li>
               ))}

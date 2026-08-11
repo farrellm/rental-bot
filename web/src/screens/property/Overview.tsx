@@ -186,361 +186,371 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
   return (
     <>
       {notice && <p className="card__notice">{notice}</p>}
-        {problems.length > 0 && (
-          <p className="card__notice">
-            {problems.length === 1 ? problems[0]?.message : "Some entries could not be read."}
-          </p>
-        )}
+      {problems.length > 0 && (
+        <p className="card__notice">
+          {problems.length === 1 ? problems[0]?.message : "Some entries could not be read."}
+        </p>
+      )}
 
-        <dl className="card__fields">
-          <Row label="Nickname" editing={editing} value={draft.nickname || "—"} htmlFor="nickname">
-            <input
-              id="nickname"
-              className={entryClass(problemFor("nickname"))}
-              value={draft.nickname}
-              onChange={(e) => set("nickname", e.target.value)}
-              autoComplete="off"
-            />
-          </Row>
+      <dl className="card__fields">
+        <Row label="Nickname" editing={editing} value={draft.nickname || "—"} htmlFor="nickname">
+          <input
+            id="nickname"
+            className={entryClass(problemFor("nickname"))}
+            value={draft.nickname}
+            onChange={(e) => set("nickname", e.target.value)}
+            autoComplete="off"
+          />
+        </Row>
 
-          <Row label="Address" editing={editing} value={draft.address_line1 || "—"} htmlFor="address_line1">
+        <Row
+          label="Address"
+          editing={editing}
+          value={draft.address_line1 || "—"}
+          htmlFor="address_line1"
+        >
+          <input
+            id="address_line1"
+            className="entry"
+            value={draft.address_line1}
+            onChange={(e) => set("address_line1", e.target.value)}
+            autoComplete="off"
+          />
+        </Row>
+
+        <Row
+          label="Line 2"
+          editing={editing}
+          value={draft.address_line2 || "—"}
+          htmlFor="address_line2"
+        >
+          <input
+            id="address_line2"
+            className="entry"
+            value={draft.address_line2}
+            onChange={(e) => set("address_line2", e.target.value)}
+            autoComplete="off"
+          />
+        </Row>
+
+        <Row
+          label="City / State / ZIP"
+          editing={editing}
+          value={[draft.city, draft.state, draft.postal_code].filter(Boolean).join(" ") || "—"}
+          htmlFor="city"
+        >
+          <div className="entry-group">
             <input
-              id="address_line1"
+              id="city"
               className="entry"
-              value={draft.address_line1}
-              onChange={(e) => set("address_line1", e.target.value)}
+              value={draft.city}
+              onChange={(e) => set("city", e.target.value)}
+              aria-label="City"
+              placeholder="City"
               autoComplete="off"
             />
-          </Row>
-
-          <Row label="Line 2" editing={editing} value={draft.address_line2 || "—"} htmlFor="address_line2">
             <input
-              id="address_line2"
               className="entry"
-              value={draft.address_line2}
-              onChange={(e) => set("address_line2", e.target.value)}
+              value={draft.state}
+              onChange={(e) => set("state", e.target.value)}
+              aria-label="State"
+              placeholder="State"
               autoComplete="off"
             />
-          </Row>
-
-          <Row
-            label="City / State / ZIP"
-            editing={editing}
-            value={[draft.city, draft.state, draft.postal_code].filter(Boolean).join(" ") || "—"}
-            htmlFor="city"
-          >
-            <div className="entry-group">
-              <input
-                id="city"
-                className="entry"
-                value={draft.city}
-                onChange={(e) => set("city", e.target.value)}
-                aria-label="City"
-                placeholder="City"
-                autoComplete="off"
-              />
-              <input
-                className="entry"
-                value={draft.state}
-                onChange={(e) => set("state", e.target.value)}
-                aria-label="State"
-                placeholder="State"
-                autoComplete="off"
-              />
-              <input
-                className="entry"
-                value={draft.postal_code}
-                onChange={(e) => set("postal_code", e.target.value)}
-                aria-label="Postal code"
-                placeholder="ZIP"
-                inputMode="numeric"
-                autoComplete="off"
-              />
-            </div>
-          </Row>
-
-          <Row label="County" editing={editing} value={draft.county || "—"} htmlFor="county">
             <input
-              id="county"
               className="entry"
-              value={draft.county}
-              onChange={(e) => set("county", e.target.value)}
-              autoComplete="off"
-            />
-          </Row>
-
-          <Row label="Status" editing={editing} value={draft.status} htmlFor="status">
-            <select
-              id="status"
-              className="entry entry--short"
-              value={draft.status}
-              onChange={(e) => set("status", e.target.value as PropertyStatus)}
-            >
-              {STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </Row>
-
-          <Row
-            label="Purchased"
-            editing={editing}
-            value={calendarDate(draft.purchase_date || null)}
-            htmlFor="purchase_date"
-            hint={problemFor("purchase_date")}
-          >
-            <input
-              id="purchase_date"
-              className={entryClass(problemFor("purchase_date"))}
-              value={draft.purchase_date}
-              onChange={(e) => set("purchase_date", e.target.value)}
-              placeholder="YYYY-MM-DD"
+              value={draft.postal_code}
+              onChange={(e) => set("postal_code", e.target.value)}
+              aria-label="Postal code"
+              placeholder="ZIP"
               inputMode="numeric"
               autoComplete="off"
             />
-          </Row>
+          </div>
+        </Row>
 
-          <Row
-            label="Price"
-            editing={editing}
-            value={draft.purchase_price ? `$${draft.purchase_price}` : "—"}
-            htmlFor="purchase_price"
-            hint={problemFor("purchase_price")}
+        <Row label="County" editing={editing} value={draft.county || "—"} htmlFor="county">
+          <input
+            id="county"
+            className="entry"
+            value={draft.county}
+            onChange={(e) => set("county", e.target.value)}
+            autoComplete="off"
+          />
+        </Row>
+
+        <Row label="Status" editing={editing} value={draft.status} htmlFor="status">
+          <select
+            id="status"
+            className="entry entry--short"
+            value={draft.status}
+            onChange={(e) => set("status", e.target.value as PropertyStatus)}
           >
+            {STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </Row>
+
+        <Row
+          label="Purchased"
+          editing={editing}
+          value={calendarDate(draft.purchase_date || null)}
+          htmlFor="purchase_date"
+          hint={problemFor("purchase_date")}
+        >
+          <input
+            id="purchase_date"
+            className={entryClass(problemFor("purchase_date"))}
+            value={draft.purchase_date}
+            onChange={(e) => set("purchase_date", e.target.value)}
+            placeholder="YYYY-MM-DD"
+            inputMode="numeric"
+            autoComplete="off"
+          />
+        </Row>
+
+        <Row
+          label="Price"
+          editing={editing}
+          value={draft.purchase_price ? `$${draft.purchase_price}` : "—"}
+          htmlFor="purchase_price"
+          hint={problemFor("purchase_price")}
+        >
+          <input
+            id="purchase_price"
+            className={entryClass(problemFor("purchase_price"))}
+            value={draft.purchase_price}
+            onChange={(e) => set("purchase_price", e.target.value)}
+            placeholder="285000.00"
+            inputMode="decimal"
+            autoComplete="off"
+          />
+        </Row>
+
+        <Row
+          label="Beds / Baths"
+          editing={editing}
+          value={`${orDashNumber(numberOrNull(draft.beds))} / ${orDashNumber(numberOrNull(draft.baths))}`}
+          htmlFor="beds"
+          hint={problemFor("beds") ?? problemFor("baths")}
+        >
+          <div className="entry-group">
             <input
-              id="purchase_price"
-              className={entryClass(problemFor("purchase_price"))}
-              value={draft.purchase_price}
-              onChange={(e) => set("purchase_price", e.target.value)}
-              placeholder="285000.00"
-              inputMode="decimal"
+              id="beds"
+              className={entryClass(problemFor("beds"))}
+              value={draft.beds}
+              onChange={(e) => set("beds", e.target.value)}
+              aria-label="Beds"
+              inputMode="numeric"
+              placeholder="Beds"
               autoComplete="off"
             />
-          </Row>
-
-          <Row
-            label="Beds / Baths"
-            editing={editing}
-            value={`${orDashNumber(numberOrNull(draft.beds))} / ${orDashNumber(numberOrNull(draft.baths))}`}
-            htmlFor="beds"
-            hint={problemFor("beds") ?? problemFor("baths")}
-          >
-            <div className="entry-group">
-              <input
-                id="beds"
-                className={entryClass(problemFor("beds"))}
-                value={draft.beds}
-                onChange={(e) => set("beds", e.target.value)}
-                aria-label="Beds"
-                inputMode="numeric"
-                placeholder="Beds"
-                autoComplete="off"
-              />
-              <input
-                className={entryClass(problemFor("baths"))}
-                value={draft.baths}
-                onChange={(e) => set("baths", e.target.value)}
-                aria-label="Baths"
-                inputMode="decimal"
-                placeholder="Baths"
-                autoComplete="off"
-              />
-            </div>
-          </Row>
-
-          <Row
-            label="Sq ft / Built"
-            editing={editing}
-            value={`${orDashNumber(numberOrNull(draft.sqft))} / ${orDashNumber(numberOrNull(draft.year_built))}`}
-            htmlFor="sqft"
-            hint={problemFor("sqft") ?? problemFor("year_built")}
-          >
-            <div className="entry-group">
-              <input
-                id="sqft"
-                className={entryClass(problemFor("sqft"))}
-                value={draft.sqft}
-                onChange={(e) => set("sqft", e.target.value)}
-                aria-label="Square feet"
-                inputMode="numeric"
-                placeholder="Sq ft"
-                autoComplete="off"
-              />
-              <input
-                className={entryClass(problemFor("year_built"))}
-                value={draft.year_built}
-                onChange={(e) => set("year_built", e.target.value)}
-                aria-label="Year built"
-                placeholder="Year"
-                inputMode="numeric"
-                autoComplete="off"
-              />
-            </div>
-          </Row>
-
-          <Row label="Notes" editing={editing} value={draft.notes || "—"} htmlFor="notes" block>
-            <textarea
-              id="notes"
-              className="entry"
-              value={draft.notes}
-              onChange={(e) => set("notes", e.target.value)}
-              rows={3}
+            <input
+              className={entryClass(problemFor("baths"))}
+              value={draft.baths}
+              onChange={(e) => set("baths", e.target.value)}
+              aria-label="Baths"
+              inputMode="decimal"
+              placeholder="Baths"
+              autoComplete="off"
             />
-          </Row>
-
-          {!editing && !isNew && (
-            <Row label="Match key" editing={false} value={property.data?.normalized_address || "—"}>
-              <span />
-            </Row>
-          )}
-        </dl>
-
-        <section className="units">
-          <h2 className="units__eyebrow">Units</h2>
-
-          <div className="units__list">
-            {live.length === 0 && !editing && <p className="units__empty">No units on file.</p>}
-
-            {live.map((unit) =>
-              editing ? (
-                <div key={unit.key} className="unit unit--editing">
-                  <div className="unit__entries">
-                    <input
-                      className={entryClass(problemFor(`unit-${unit.key}`))}
-                      value={unit.label}
-                      onChange={(e) => setUnit(unit.key, { label: e.target.value })}
-                      placeholder="Label"
-                      aria-label="Unit label"
-                      autoComplete="off"
-                    />
-                    <input
-                      className={entryClass(problemFor(`unit-${unit.key}-beds`))}
-                      value={unit.beds}
-                      onChange={(e) => setUnit(unit.key, { beds: e.target.value })}
-                      placeholder="Beds"
-                      aria-label="Beds"
-                      inputMode="numeric"
-                      autoComplete="off"
-                    />
-                    <input
-                      className={entryClass(problemFor(`unit-${unit.key}-baths`))}
-                      value={unit.baths}
-                      onChange={(e) => setUnit(unit.key, { baths: e.target.value })}
-                      placeholder="Baths"
-                      aria-label="Baths"
-                      inputMode="decimal"
-                      autoComplete="off"
-                    />
-                    <input
-                      className={entryClass(problemFor(`unit-${unit.key}-sqft`))}
-                      value={unit.sqft}
-                      onChange={(e) => setUnit(unit.key, { sqft: e.target.value })}
-                      placeholder="Sq ft"
-                      aria-label="Square feet"
-                      inputMode="numeric"
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div className="unit__actions">
-                    <button
-                      type="button"
-                      className="button button--danger"
-                      onClick={() => setUnit(unit.key, { removed: true })}
-                      disabled={live.length === 1}
-                      title={live.length === 1 ? "A property keeps at least one unit." : undefined}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div key={unit.key} className="unit">
-                  <span className="unit__label mono">{unit.label}</span>
-                  <span className="unit__facts mono">{unitFacts(unit)}</span>
-                  <span className={occupancyClass(unitsById.get(unit.id ?? 0))}>
-                    {occupancy(unitsById.get(unit.id ?? 0))}
-                  </span>
-                </div>
-              ),
-            )}
           </div>
+        </Row>
 
-          {editing && (
-            <div className="units__add">
-              <button
-                type="button"
-                className="button"
-                onClick={() => setUnits((current) => [...current, blankUnitDraft()])}
-              >
-                Add unit
-              </button>
-              {isNew && live.length === 0 && (
-                <p className="hint">A property with no units listed gets one called Main.</p>
-              )}
-            </div>
-          )}
-        </section>
+        <Row
+          label="Sq ft / Built"
+          editing={editing}
+          value={`${orDashNumber(numberOrNull(draft.sqft))} / ${orDashNumber(numberOrNull(draft.year_built))}`}
+          htmlFor="sqft"
+          hint={problemFor("sqft") ?? problemFor("year_built")}
+        >
+          <div className="entry-group">
+            <input
+              id="sqft"
+              className={entryClass(problemFor("sqft"))}
+              value={draft.sqft}
+              onChange={(e) => set("sqft", e.target.value)}
+              aria-label="Square feet"
+              inputMode="numeric"
+              placeholder="Sq ft"
+              autoComplete="off"
+            />
+            <input
+              className={entryClass(problemFor("year_built"))}
+              value={draft.year_built}
+              onChange={(e) => set("year_built", e.target.value)}
+              aria-label="Year built"
+              placeholder="Year"
+              inputMode="numeric"
+              autoComplete="off"
+            />
+          </div>
+        </Row>
 
-        <footer className="record__foot">
-          <div className="actions">
-            {editing ? (
-              <>
-                <button
-                  type="button"
-                  className="button button--primary"
-                  onClick={() => void save()}
-                  disabled={saving}
-                >
-                  {saving ? "Saving" : isNew ? "Create property" : "Save changes"}
-                </button>
-                <button type="button" className="button" onClick={cancel} disabled={saving}>
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                <button type="button" className="button button--primary" onClick={startAmending}>
-                  Amend
-                </button>
-                <Link to="/properties" className="button">
-                  Back
-                </Link>
-                {confirmingDelete ? (
-                  <>
-                    <span className="hint hint--fault">Delete this record?</span>
-                    <button
-                      type="button"
-                      className="button button--danger"
-                      onClick={() => void remove()}
-                      disabled={saving}
-                    >
-                      Delete
-                    </button>
-                    <button
-                      type="button"
-                      className="button"
-                      onClick={() => setConfirmingDelete(false)}
-                    >
-                      Keep
-                    </button>
-                  </>
-                ) : (
+        <Row label="Notes" editing={editing} value={draft.notes || "—"} htmlFor="notes" block>
+          <textarea
+            id="notes"
+            className="entry"
+            value={draft.notes}
+            onChange={(e) => set("notes", e.target.value)}
+            rows={3}
+          />
+        </Row>
+
+        {!editing && !isNew && (
+          <Row label="Match key" editing={false} value={property.data?.normalized_address || "—"}>
+            <span />
+          </Row>
+        )}
+      </dl>
+
+      <section className="units">
+        <h2 className="units__eyebrow">Units</h2>
+
+        <div className="units__list">
+          {live.length === 0 && !editing && <p className="units__empty">No units on file.</p>}
+
+          {live.map((unit) =>
+            editing ? (
+              <div key={unit.key} className="unit unit--editing">
+                <div className="unit__entries">
+                  <input
+                    className={entryClass(problemFor(`unit-${unit.key}`))}
+                    value={unit.label}
+                    onChange={(e) => setUnit(unit.key, { label: e.target.value })}
+                    placeholder="Label"
+                    aria-label="Unit label"
+                    autoComplete="off"
+                  />
+                  <input
+                    className={entryClass(problemFor(`unit-${unit.key}-beds`))}
+                    value={unit.beds}
+                    onChange={(e) => setUnit(unit.key, { beds: e.target.value })}
+                    placeholder="Beds"
+                    aria-label="Beds"
+                    inputMode="numeric"
+                    autoComplete="off"
+                  />
+                  <input
+                    className={entryClass(problemFor(`unit-${unit.key}-baths`))}
+                    value={unit.baths}
+                    onChange={(e) => setUnit(unit.key, { baths: e.target.value })}
+                    placeholder="Baths"
+                    aria-label="Baths"
+                    inputMode="decimal"
+                    autoComplete="off"
+                  />
+                  <input
+                    className={entryClass(problemFor(`unit-${unit.key}-sqft`))}
+                    value={unit.sqft}
+                    onChange={(e) => setUnit(unit.key, { sqft: e.target.value })}
+                    placeholder="Sq ft"
+                    aria-label="Square feet"
+                    inputMode="numeric"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="unit__actions">
                   <button
                     type="button"
                     className="button button--danger"
-                    onClick={() => setConfirmingDelete(true)}
+                    onClick={() => setUnit(unit.key, { removed: true })}
+                    disabled={live.length === 1}
+                    title={live.length === 1 ? "A property keeps at least one unit." : undefined}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div key={unit.key} className="unit">
+                <span className="unit__label mono">{unit.label}</span>
+                <span className="unit__facts mono">{unitFacts(unit)}</span>
+                <span className={occupancyClass(unitsById.get(unit.id ?? 0))}>
+                  {occupancy(unitsById.get(unit.id ?? 0))}
+                </span>
+              </div>
+            ),
+          )}
+        </div>
+
+        {editing && (
+          <div className="units__add">
+            <button
+              type="button"
+              className="button"
+              onClick={() => setUnits((current) => [...current, blankUnitDraft()])}
+            >
+              Add unit
+            </button>
+            {isNew && live.length === 0 && (
+              <p className="hint">A property with no units listed gets one called Main.</p>
+            )}
+          </div>
+        )}
+      </section>
+
+      <footer className="record__foot">
+        <div className="actions">
+          {editing ? (
+            <>
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={() => void save()}
+                disabled={saving}
+              >
+                {saving ? "Saving" : isNew ? "Create property" : "Save changes"}
+              </button>
+              <button type="button" className="button" onClick={cancel} disabled={saving}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="button button--primary" onClick={startAmending}>
+                Amend
+              </button>
+              <Link to="/properties" className="button">
+                Back
+              </Link>
+              {confirmingDelete ? (
+                <>
+                  <span className="hint hint--fault">Delete this record?</span>
+                  <button
+                    type="button"
+                    className="button button--danger"
+                    onClick={() => void remove()}
+                    disabled={saving}
                   >
                     Delete
                   </button>
-                )}
-              </>
-            )}
-          </div>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => setConfirmingDelete(false)}
+                  >
+                    Keep
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="button button--danger"
+                  onClick={() => setConfirmingDelete(true)}
+                >
+                  Delete
+                </button>
+              )}
+            </>
+          )}
+        </div>
 
-          <Stamp state={editing ? "amending" : draft.status} />
-        </footer>
+        <Stamp state={editing ? "amending" : draft.status} />
+      </footer>
     </>
   );
 }
@@ -610,7 +620,9 @@ function unitFacts(unit: UnitDraft): string {
  */
 function occupancy(unit: Unit | undefined): string {
   if (!unit || unit.active_lease_id == null) return "Vacant";
-  return unit.active_lease_end_date ? `Let to ${unit.active_lease_end_date}` : "Let, month to month";
+  return unit.active_lease_end_date
+    ? `Let to ${unit.active_lease_end_date}`
+    : "Let, month to month";
 }
 
 function occupancyClass(unit: Unit | undefined): string {

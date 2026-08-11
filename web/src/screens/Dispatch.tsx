@@ -1,7 +1,12 @@
 import { useState } from "react";
 
 import { describeError } from "../api/client";
-import { useChannelStanding, useIssuePairingCode, useNotices, useSendTestNotice } from "../api/queries";
+import {
+  useChannelStanding,
+  useIssuePairingCode,
+  useNotices,
+  useSendTestNotice,
+} from "../api/queries";
 import type { ChannelStanding, Notice, PairingCode, Severity } from "../api/types";
 import { FieldRow } from "../components/FieldRow";
 import { Stamp, type StampState } from "../components/Stamp";
@@ -77,7 +82,9 @@ export function Dispatch() {
           <Tally standing={data} />
           <Actions standing={data} onIssued={setIssued} />
         </div>
-        {!standing.isPending && data && <Stamp state={STATE_STAMP[data.state]} at={data.checked_at} />}
+        {!standing.isPending && data && (
+          <Stamp state={STATE_STAMP[data.state]} at={data.checked_at} />
+        )}
       </footer>
     </section>
   );
@@ -115,7 +122,8 @@ function Standing({ standing, issued }: { standing: ChannelStanding; issued: Pai
   return (
     <dl className="card__fields">
       <FieldRow label="Sends to">
-        @{standing.bot_username ?? DASH}, paired {standing.paired_at ? timestamp(standing.paired_at) : DASH}
+        @{standing.bot_username ?? DASH}, paired{" "}
+        {standing.paired_at ? timestamp(standing.paired_at) : DASH}
       </FieldRow>
       <FieldRow label="Last sent">
         {standing.last_sent_at ? ago(standing.last_sent_at) : "nothing has gone out yet"}
@@ -224,9 +232,7 @@ function Actions({
   return (
     <div className="intake__actions">
       {failure && <p className="dispatch__failure">{describeError(failure)}</p>}
-      {test.isSuccess && !test.isPending && (
-        <p className="dispatch__tally">Test notice sent.</p>
-      )}
+      {test.isSuccess && !test.isPending && <p className="dispatch__tally">Test notice sent.</p>}
 
       <div className="actions">
         {!standing.paired && (
@@ -254,8 +260,9 @@ function Actions({
 
       {standing.paired && (
         <p className="dispatch__note">
-          Unpairing needs a shell on the host: <span className="mono">rental-bot -unpair-telegram</span>.
-          Nothing reachable from a browser or from the chat can change who gets these.
+          Unpairing needs a shell on the host:{" "}
+          <span className="mono">rental-bot -unpair-telegram</span>. Nothing reachable from a
+          browser or from the chat can change who gets these.
         </p>
       )}
     </div>
@@ -347,7 +354,9 @@ function Line({ notice }: { notice: Notice }) {
           </span>
         )}
         {cleared && notice.resolved_at && (
-          <span className="notice-line__cleared stamped">cleared {hourMinute(notice.resolved_at)}</span>
+          <span className="notice-line__cleared stamped">
+            cleared {hourMinute(notice.resolved_at)}
+          </span>
         )}
       </div>
     </div>

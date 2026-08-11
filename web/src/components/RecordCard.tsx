@@ -27,9 +27,7 @@ export function RecordCard({ status, error, loading }: Props) {
         </div>
         <div className="card__file">
           <p className="card__eyebrow stamped">Record of service</p>
-          <p className="card__read mono">
-            {status ? `read ${clock(status.checked_at)}` : DASH}
-          </p>
+          <p className="card__read mono">{status ? `read ${clock(status.checked_at)}` : DASH}</p>
         </div>
       </header>
 
@@ -40,9 +38,7 @@ export function RecordCard({ status, error, loading }: Props) {
         <FieldRow label="Commit">{status ? commit(status.commit) : DASH}</FieldRow>
         <FieldRow label="Built">{orDash(status?.build_date)}</FieldRow>
         <FieldRow label="Runtime">{orDash(status?.go_version)}</FieldRow>
-        <FieldRow label="Uptime">
-          {status ? uptime(status.uptime_seconds) : DASH}
-        </FieldRow>
+        <FieldRow label="Uptime">{status ? uptime(status.uptime_seconds) : DASH}</FieldRow>
 
         {/* The readiness checks carry their own labels and detail; a failing
             one says what to do about it. */}

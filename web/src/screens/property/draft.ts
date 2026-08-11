@@ -8,7 +8,13 @@
  */
 
 import { money, parseMoney } from "../../format";
-import type { PropertyDetail, PropertyStatus, PropertyWrite, Unit, UnitWrite } from "../../api/types";
+import type {
+  PropertyDetail,
+  PropertyStatus,
+  PropertyWrite,
+  Unit,
+  UnitWrite,
+} from "../../api/types";
 
 export interface Draft {
   nickname: string;
@@ -69,7 +75,10 @@ export function toDraft(property: PropertyDetail): Draft {
     county: property.county,
     purchase_date: property.purchase_date ?? "",
     // Shown the way it is typed back: "285,000.00", not 28500000.
-    purchase_price: property.purchase_price_cents === null ? "" : money(property.purchase_price_cents).replace("$", ""),
+    purchase_price:
+      property.purchase_price_cents === null
+        ? ""
+        : money(property.purchase_price_cents).replace("$", ""),
     beds: numberToText(property.beds),
     baths: numberToText(property.baths),
     sqft: numberToText(property.sqft),
@@ -179,17 +188,16 @@ export function toPropertyWrite(
   if (!original || draft.purchase_price !== original.purchase_price) {
     const cents = parseMoney(draft.purchase_price);
     if (cents === undefined) {
-      problems.push({ field: "purchase_price", message: "Write the price as an amount, like 285000.00." });
+      problems.push({
+        field: "purchase_price",
+        message: "Write the price as an amount, like 285000.00.",
+      });
     } else {
       body.purchase_price_cents = cents;
     }
   }
 
-  const number = (
-    key: "beds" | "baths" | "sqft" | "year_built",
-    whole: boolean,
-    label: string,
-  ) => {
+  const number = (key: "beds" | "baths" | "sqft" | "year_built", whole: boolean, label: string) => {
     if (original && draft[key] === original[key]) return;
     const value = textToNumber(draft[key], whole);
     if (value === undefined) {

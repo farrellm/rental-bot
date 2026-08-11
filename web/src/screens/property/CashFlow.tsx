@@ -148,7 +148,9 @@ export function CashFlow() {
 
                 {ledger.data.items.map((entry) => (
                   <div key={entry.id} className="ledger-sheet__row">
-                    <span className="ledger-sheet__date mono">{calendarDate(entry.occurred_on)}</span>
+                    <span className="ledger-sheet__date mono">
+                      {calendarDate(entry.occurred_on)}
+                    </span>
                     <span className="ledger-sheet__entry">
                       {entry.description || entry.counterparty || "—"}
                       {entry.needs_review && (
@@ -212,7 +214,11 @@ export function CashFlow() {
           />
         ) : (
           <div className="sheet__actions">
-            <button type="button" className="button button--primary" onClick={() => setAdding(true)}>
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() => setAdding(true)}
+            >
               Add an entry
             </button>
           </div>
@@ -384,5 +390,8 @@ function rangeDates(range: Range): { from?: string; to?: string } {
 
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
-  return { from: `${year}-${month}-01`, to: `${year}-${month}-${String(lastDay).padStart(2, "0")}` };
+  return {
+    from: `${year}-${month}-01`,
+    to: `${year}-${month}-${String(lastDay).padStart(2, "0")}`,
+  };
 }

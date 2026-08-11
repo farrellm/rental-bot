@@ -18,8 +18,8 @@ export function MigrationLog({ migrations }: Props) {
 
       {migrations.length === 0 ? (
         <p className="ledger__empty">
-          No migrations recorded. Run <span className="mono">make migrate</span> to
-          build the schema.
+          No migrations recorded. Run <span className="mono">make migrate</span> to build the
+          schema.
         </p>
       ) : (
         <ul className="ledger__list">

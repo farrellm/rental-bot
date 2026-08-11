@@ -104,11 +104,15 @@ function Jacket({ doc, onRemove }: { doc: Document; onRemove: () => void }) {
               Printing it again underneath says nothing twice. */}
           {doc.title && doc.title !== doc.original_filename && (
             <>
-              <span className="jacket__sep" aria-hidden="true">·</span>
+              <span className="jacket__sep" aria-hidden="true">
+                ·
+              </span>
               {doc.original_filename}
             </>
           )}
-          <span className="jacket__sep" aria-hidden="true">·</span>
+          <span className="jacket__sep" aria-hidden="true">
+            ·
+          </span>
           {fileSize(doc.size_bytes)}
         </p>
         <p className="jacket__accession mono">
@@ -205,7 +209,9 @@ function Attach({
         <p className="attach__state" role="status">
           <span className="attach__filename mono">{filename}</span>
           {state === "filing" && <span className="attach__word stamped">filing</span>}
-          {state === "filed" && <span className="attach__word attach__word--done stamped">filed</span>}
+          {state === "filed" && (
+            <span className="attach__word attach__word--done stamped">filed</span>
+          )}
           {state === "already" && (
             <span className="attach__word attach__word--already stamped">already on file</span>
           )}

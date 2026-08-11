@@ -150,7 +150,9 @@ export function useCreateProperty(): UseMutationResult<PropertyDetail, Error, Pr
   });
 }
 
-export function useUpdateProperty(id: number): UseMutationResult<PropertyDetail, Error, PropertyWrite> {
+export function useUpdateProperty(
+  id: number,
+): UseMutationResult<PropertyDetail, Error, PropertyWrite> {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (body: PropertyWrite) =>
@@ -542,8 +544,7 @@ export function useIntakeStanding(): UseQueryResult<IntakeStanding, Error> {
 export function useEmailMessages(): UseQueryResult<EmailMessagePage, Error> {
   return useQuery({
     queryKey: keys.emailMessages,
-    queryFn: ({ signal }) =>
-      request<EmailMessagePage>("/api/v1/email-messages", { signal }),
+    queryFn: ({ signal }) => request<EmailMessagePage>("/api/v1/email-messages", { signal }),
     refetchInterval: 15_000,
   });
 }

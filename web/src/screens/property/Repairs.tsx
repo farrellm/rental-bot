@@ -61,7 +61,9 @@ export function Repairs() {
 
         {repairs.data &&
           (repairs.data.items.length === 0 ? (
-            <p className="sheet__empty">Nothing on the docket. Open the first job when there is one.</p>
+            <p className="sheet__empty">
+              Nothing on the docket. Open the first job when there is one.
+            </p>
           ) : (
             <div className="dockets">
               {repairs.data.items.map((repair) => (
@@ -92,7 +94,11 @@ export function Repairs() {
           />
         ) : (
           <div className="sheet__actions">
-            <button type="button" className="button button--primary" onClick={() => setAdding(true)}>
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() => setAdding(true)}
+            >
               Open a repair
             </button>
           </div>

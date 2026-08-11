@@ -22,9 +22,7 @@ export function IndexCard({ property }: { property: PropertyListItem }) {
       <p className="index__address mono">{shortAddress(property)}</p>
 
       <footer className="index__foot">
-        <span className="index__units mono">
-          {plural(property.unit_count, "unit", "units")}
-        </span>
+        <span className="index__units mono">{plural(property.unit_count, "unit", "units")}</span>
         <Stamp state={property.status} small />
       </footer>
     </Link>
@@ -32,11 +30,7 @@ export function IndexCard({ property }: { property: PropertyListItem }) {
 }
 
 /** The address on one line, skipping the parts that were never filled in. */
-function shortAddress(property: {
-  address_line1: string;
-  city: string;
-  state: string;
-}): string {
+function shortAddress(property: { address_line1: string; city: string; state: string }): string {
   const region = [property.city, property.state].filter(Boolean).join(" ");
   return [property.address_line1, region].filter(Boolean).join(", ");
 }
