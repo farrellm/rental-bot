@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useParams } from "react-router";
 
-import { describeError } from "../../api/client";
 import {
+  describeError,
   useAddLeaseTenant,
   useCreateLease,
   useCreateTenant,
@@ -11,8 +11,9 @@ import {
   useProperty,
   useTenants,
   useUpdateLease,
-} from "../../api/queries";
-import type { Lease, LeaseStatus } from "../../api/types";
+  type Lease,
+  type LeaseStatus,
+} from "../../api";
 import { FieldRow } from "../../components/FieldRow";
 import { Select } from "../../components/Select";
 import { SheetField, SheetFilter } from "../../components/SheetField";

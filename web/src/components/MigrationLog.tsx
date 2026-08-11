@@ -1,4 +1,4 @@
-import type { Migration } from "../api/types";
+import type { Migration } from "../api";
 import { timestamp } from "../format";
 
 interface Props {

@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 
 import { fileNumber, oneLineAddress, plural } from "../format";
-import type { PropertyListItem } from "../api/types";
+import type { PropertyListItem } from "../api";
 import { Stamp } from "./Stamp";
 
 /**

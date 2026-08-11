@@ -8,13 +8,7 @@
  */
 
 import { isCalendarDate, money, parseMoney } from "../../format";
-import type {
-  PropertyDetail,
-  PropertyStatus,
-  PropertyWrite,
-  Unit,
-  UnitWrite,
-} from "../../api/types";
+import type { PropertyDetail, PropertyStatus, PropertyWrite, Unit, UnitWrite } from "../../api";
 
 export interface Draft {
   nickname: string;

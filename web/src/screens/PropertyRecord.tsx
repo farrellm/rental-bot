@@ -1,8 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link, NavLink, Outlet, useLocation, useParams } from "react-router";
 
-import { describeError } from "../api/client";
-import { useProperty } from "../api/queries";
+import { describeError, useProperty } from "../api";
 import { fileNumber, oneLineAddress } from "../format";
 import { Overview } from "./property/Overview";
 

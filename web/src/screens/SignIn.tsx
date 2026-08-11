@@ -2,8 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { ApiError, describeError } from "../api/client";
-import { keys, signIn } from "../api/queries";
+import { ApiError, describeError, keys, signIn } from "../api";
 import { Stamp } from "../components/Stamp";
 
 /**

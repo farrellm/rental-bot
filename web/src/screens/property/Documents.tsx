@@ -1,9 +1,14 @@
 import { useRef, useState } from "react";
 import { useParams } from "react-router";
 
-import { describeError } from "../../api/client";
-import { useDeleteDocument, useDocuments, useUploadDocument } from "../../api/queries";
-import type { Document, DocumentKind } from "../../api/types";
+import {
+  describeError,
+  useDeleteDocument,
+  useDocuments,
+  useUploadDocument,
+  type Document,
+  type DocumentKind,
+} from "../../api";
 import { Select } from "../../components/Select";
 import { SheetFilter } from "../../components/SheetField";
 import { bytes, timestamp } from "../../format";

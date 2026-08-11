@@ -84,10 +84,6 @@ export interface Unit {
   active_lease_end_date?: string | null;
 }
 
-export interface UnitList {
-  items: Unit[];
-}
-
 /**
  * The writable half of a property.
  *

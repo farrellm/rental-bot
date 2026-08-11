@@ -1,13 +1,16 @@
 import { useState } from "react";
 
-import { describeError } from "../api/client";
 import {
+  describeError,
   useChannelStanding,
   useIssuePairingCode,
   useNotices,
   useSendTestNotice,
-} from "../api/queries";
-import type { ChannelStanding, Notice, PairingCode, Severity } from "../api/types";
+  type ChannelStanding,
+  type Notice,
+  type PairingCode,
+  type Severity,
+} from "../api";
 import { DayRegister } from "../components/DayRegister";
 import { FieldRow } from "../components/FieldRow";
 import { Stamp, type StampState } from "../components/Stamp";

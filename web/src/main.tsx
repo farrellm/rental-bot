@@ -25,7 +25,7 @@ import "./styles/intake.css";
 import "./styles/dispatch.css";
 
 import { AppRoutes } from "./routes";
-import { ApiError } from "./api/client";
+import { ApiError } from "./api";
 
 const client = new QueryClient({
   defaultOptions: {

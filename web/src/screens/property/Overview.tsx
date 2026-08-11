@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
-import { describeError } from "../../api/client";
 import {
+  describeError,
   useCreateProperty,
   useCreateUnit,
   useDeleteProperty,
@@ -10,8 +10,9 @@ import {
   useProperty,
   useUpdateProperty,
   useUpdateUnit,
-} from "../../api/queries";
-import type { PropertyStatus, Unit } from "../../api/types";
+  type PropertyStatus,
+  type Unit,
+} from "../../api";
 import { AmendableRow } from "../../components/FieldRow";
 import { Stamp } from "../../components/Stamp";
 import { calendarDate, DASH, orDashNumber } from "../../format";

@@ -1,4 +1,4 @@
-import type { Status } from "../api/types";
+import type { Status } from "../api";
 import { clock, commit, DASH, orDash, uptime } from "../format";
 import { FieldRow } from "./FieldRow";
 import { MigrationLog } from "./MigrationLog";

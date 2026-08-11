@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 
-import { describeError } from "../api/client";
 import {
+  describeError,
   useConnectGmail,
   useDisconnectGmail,
   useEmailMessages,
   useIntakeStanding,
   useSyncNow,
-} from "../api/queries";
-import type { EmailMessage, EmailStatus, IntakeStanding } from "../api/types";
+  type EmailMessage,
+  type EmailStatus,
+  type IntakeStanding,
+} from "../api";
 import { DayRegister } from "../components/DayRegister";
 import { FieldRow } from "../components/FieldRow";
 import { Stamp, type StampState } from "../components/Stamp";

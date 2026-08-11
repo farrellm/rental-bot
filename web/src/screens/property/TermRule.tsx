@@ -1,4 +1,4 @@
-import type { LeaseStatus } from "../../api/types";
+import type { LeaseStatus } from "../../api";
 
 interface Props {
   start: string;
