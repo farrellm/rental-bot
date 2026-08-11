@@ -4,6 +4,8 @@ import { useParams } from "react-router";
 import { describeError } from "../../api/client";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../../api/queries";
 import type { Document, DocumentKind } from "../../api/types";
+import { Select } from "../../components/Select";
+import { SheetFilter } from "../../components/SheetField";
 import { bytes, timestamp } from "../../format";
 
 const KINDS: DocumentKind[] = [
@@ -177,20 +179,9 @@ function Attach({
 
   return (
     <div className="attach">
-      <label className="sheet__filter">
-        <span className="sheet__filter-label stamped">Kind</span>
-        <select
-          className="entry entry--short"
-          value={kind}
-          onChange={(e) => setKind(e.target.value as DocumentKind)}
-        >
-          {KINDS.map((k) => (
-            <option key={k} value={k}>
-              {KIND_LABEL[k]}
-            </option>
-          ))}
-        </select>
-      </label>
+      <SheetFilter label="Kind">
+        <Select value={kind} onChange={setKind} options={KINDS} labels={KIND_LABEL} short />
+      </SheetFilter>
 
       <label className="attach__choose">
         <span className="attach__word stamped">Attach a document</span>

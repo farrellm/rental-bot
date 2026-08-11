@@ -10,6 +10,10 @@ import {
   useUpdateRepair,
 } from "../../api/queries";
 import type { Repair, RepairStatus } from "../../api/types";
+import { FieldRow } from "../../components/FieldRow";
+import { Select } from "../../components/Select";
+import { SheetField, SheetFilter } from "../../components/SheetField";
+import { SheetForm } from "../../components/SheetForm";
 import { Stamp, type StampState } from "../../components/Stamp";
 import {
   calendarDate,
@@ -186,29 +190,24 @@ function Docket({ repair, propertyId, open, onToggle, onError }: DocketProps) {
       {open && (
         <div className="docket__body" id={`docket-${repair.id}`}>
           <dl className="docket__facts">
-            <Fact label="Opened">{calendarDate(repair.opened_on)}</Fact>
-            <Fact label="Closed">{calendarDate(repair.closed_on)}</Fact>
-            <Fact label="Trade">{repair.category || DASH}</Fact>
-            <Fact label="Estimate">{money(repair.estimate_cents)}</Fact>
-            <Fact label="Actual">{money(repair.actual_cents)}</Fact>
-            <Fact label="Capital">{repair.is_capex ? "Yes" : "No"}</Fact>
+            <FieldRow label="Opened">{calendarDate(repair.opened_on)}</FieldRow>
+            <FieldRow label="Closed">{calendarDate(repair.closed_on)}</FieldRow>
+            <FieldRow label="Trade">{repair.category || DASH}</FieldRow>
+            <FieldRow label="Estimate">{money(repair.estimate_cents)}</FieldRow>
+            <FieldRow label="Actual">{money(repair.actual_cents)}</FieldRow>
+            <FieldRow label="Capital">{repair.is_capex ? "Yes" : "No"}</FieldRow>
           </dl>
 
           <div className="docket__standing">
-            <label className="sheet__filter">
-              <span className="sheet__filter-label stamped">Standing</span>
-              <select
-                className="entry entry--short"
+            <SheetFilter label="Standing">
+              <Select
                 value={repair.status}
-                onChange={(e) => void setStatus(e.target.value as RepairStatus)}
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABEL[s]}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={(status) => void setStatus(status)}
+                options={STATUSES}
+                labels={STATUS_LABEL}
+                short
+              />
+            </SheetFilter>
           </div>
 
           <h3 className="docket__eyebrow stamped">History</h3>
@@ -252,15 +251,6 @@ function Docket({ repair, propertyId, open, onToggle, onError }: DocketProps) {
         </div>
       )}
     </article>
-  );
-}
-
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="field">
-      <dt className="field__label stamped">{label}</dt>
-      <dd className="field__value mono">{children}</dd>
-    </div>
   );
 }
 
@@ -318,72 +308,55 @@ function RepairForm({ onCancel, onSubmit }: RepairFormProps) {
   }
 
   return (
-    <div className="sheet__form">
-      <h3 className="sheet__eyebrow stamped">New repair</h3>
+    <SheetForm
+      title="New repair"
+      problem={problem}
+      saving={saving}
+      submitLabel="Open the repair"
+      onSubmit={() => void submit()}
+      onCancel={onCancel}
+    >
+      <SheetField label="Opened">
+        <input
+          className="entry"
+          value={openedOn}
+          onChange={(e) => setOpenedOn(e.target.value)}
+          placeholder="YYYY-MM-DD"
+          inputMode="numeric"
+          autoComplete="off"
+        />
+      </SheetField>
 
-      <div className="sheet__form-rows">
-        <label className="sheet__field">
-          <span className="field__label stamped">Opened</span>
-          <input
-            className="entry"
-            value={openedOn}
-            onChange={(e) => setOpenedOn(e.target.value)}
-            placeholder="YYYY-MM-DD"
-            inputMode="numeric"
-            autoComplete="off"
-          />
-        </label>
+      <SheetField label="Trade">
+        <input
+          className="entry"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          placeholder="plumbing"
+          autoComplete="off"
+        />
+      </SheetField>
 
-        <label className="sheet__field">
-          <span className="field__label stamped">Trade</span>
-          <input
-            className="entry"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            placeholder="plumbing"
-            autoComplete="off"
-          />
-        </label>
+      <SheetField label="Estimate">
+        <input
+          className="entry"
+          value={estimate}
+          onChange={(e) => setEstimate(e.target.value)}
+          placeholder="285.00"
+          inputMode="decimal"
+          autoComplete="off"
+        />
+      </SheetField>
 
-        <label className="sheet__field">
-          <span className="field__label stamped">Estimate</span>
-          <input
-            className="entry"
-            value={estimate}
-            onChange={(e) => setEstimate(e.target.value)}
-            placeholder="285.00"
-            inputMode="decimal"
-            autoComplete="off"
-          />
-        </label>
-
-        <label className="sheet__field sheet__field--wide">
-          <span className="field__label stamped">What is wrong</span>
-          <input
-            className="entry"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Kitchen tap drips at the base"
-            autoComplete="off"
-          />
-        </label>
-      </div>
-
-      {problem && <p className="hint hint--fault">{problem}</p>}
-
-      <div className="actions">
-        <button
-          type="button"
-          className="button button--primary"
-          onClick={() => void submit()}
-          disabled={saving}
-        >
-          {saving ? "Saving" : "Open the repair"}
-        </button>
-        <button type="button" className="button" onClick={onCancel} disabled={saving}>
-          Cancel
-        </button>
-      </div>
-    </div>
+      <SheetField label="What is wrong" wide>
+        <input
+          className="entry"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Kitchen tap drips at the base"
+          autoComplete="off"
+        />
+      </SheetField>
+    </SheetForm>
   );
 }

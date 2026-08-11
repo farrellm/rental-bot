@@ -9,6 +9,9 @@ import {
   type LedgerFilter,
 } from "../../api/queries";
 import type { TransactionCategory } from "../../api/types";
+import { Select } from "../../components/Select";
+import { SheetField, SheetFilter } from "../../components/SheetField";
+import { SheetForm } from "../../components/SheetForm";
 import { calendarDate, DASH, isCalendarDate, money, parseMoney, today } from "../../format";
 
 /** The categories, in the order the ledger's own CHECK lists them. */
@@ -43,7 +46,24 @@ const CATEGORY_LABEL: Record<TransactionCategory, string> = {
   other: "Other",
 };
 
+/**
+ * The sign, chosen as a word.
+ *
+ * "-285.00" is a thing people mistype and "Money out" is not. It becomes
+ * signed cents at the form's boundary and nowhere else.
+ */
+type Direction = "in" | "out";
+
+const DIRECTIONS: Direction[] = ["out", "in"];
+
+const DIRECTION_LABEL: Record<Direction, string> = {
+  out: "Money out",
+  in: "Money in",
+};
+
 type Range = "month" | "year" | "all";
+
+const RANGES: Range[] = ["month", "year", "all"];
 
 const RANGE_LABEL: Record<Range, string> = {
   month: "This month",
@@ -93,36 +113,26 @@ export function CashFlow() {
         {/* The tab overhead already says which section this is. */}
         <div className="sheet__head">
           <div className="sheet__filters">
-            <label className="sheet__filter">
-              <span className="sheet__filter-label stamped">Range</span>
-              <select
-                className="entry entry--short"
+            <SheetFilter label="Range">
+              <Select
                 value={range}
-                onChange={(e) => setRange(e.target.value as Range)}
-              >
-                {(Object.keys(RANGE_LABEL) as Range[]).map((key) => (
-                  <option key={key} value={key}>
-                    {RANGE_LABEL[key]}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={setRange}
+                options={RANGES}
+                labels={RANGE_LABEL}
+                short
+              />
+            </SheetFilter>
 
-            <label className="sheet__filter">
-              <span className="sheet__filter-label stamped">Category</span>
-              <select
-                className="entry entry--short"
+            <SheetFilter label="Category">
+              <Select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as TransactionCategory | "")}
-              >
-                <option value="">All</option>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {CATEGORY_LABEL[c]}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={setCategory}
+                options={CATEGORIES}
+                labels={CATEGORY_LABEL}
+                anyLabel="All"
+                short
+              />
+            </SheetFilter>
           </div>
         </div>
 
@@ -248,7 +258,7 @@ interface EntryFormProps {
 function EntryForm({ onCancel, onSubmit }: EntryFormProps) {
   const [occurredOn, setOccurredOn] = useState(today());
   const [amount, setAmount] = useState("");
-  const [direction, setDirection] = useState<"in" | "out">("out");
+  const [direction, setDirection] = useState<Direction>("out");
   const [category, setCategory] = useState<TransactionCategory>("repair");
   const [description, setDescription] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
@@ -282,89 +292,64 @@ function EntryForm({ onCancel, onSubmit }: EntryFormProps) {
   }
 
   return (
-    <div className="sheet__form">
-      <h3 className="sheet__eyebrow stamped">New entry</h3>
+    <SheetForm
+      title="New entry"
+      problem={problem}
+      saving={saving}
+      submitLabel="Save entry"
+      onSubmit={() => void submit()}
+      onCancel={onCancel}
+    >
+      <SheetField label="Date">
+        <input
+          className="entry"
+          value={occurredOn}
+          onChange={(e) => setOccurredOn(e.target.value)}
+          placeholder="YYYY-MM-DD"
+          inputMode="numeric"
+          autoComplete="off"
+        />
+      </SheetField>
 
-      <div className="sheet__form-rows">
-        <label className="sheet__field">
-          <span className="field__label stamped">Date</span>
-          <input
-            className="entry"
-            value={occurredOn}
-            onChange={(e) => setOccurredOn(e.target.value)}
-            placeholder="YYYY-MM-DD"
-            inputMode="numeric"
-            autoComplete="off"
-          />
-        </label>
+      <SheetField label="Direction">
+        <Select
+          value={direction}
+          onChange={setDirection}
+          options={DIRECTIONS}
+          labels={DIRECTION_LABEL}
+        />
+      </SheetField>
 
-        <label className="sheet__field">
-          <span className="field__label stamped">Direction</span>
-          <select
-            className="entry"
-            value={direction}
-            onChange={(e) => setDirection(e.target.value as "in" | "out")}
-          >
-            <option value="out">Money out</option>
-            <option value="in">Money in</option>
-          </select>
-        </label>
+      <SheetField label="Amount">
+        <input
+          className="entry"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="285.00"
+          inputMode="decimal"
+          autoComplete="off"
+        />
+      </SheetField>
 
-        <label className="sheet__field">
-          <span className="field__label stamped">Amount</span>
-          <input
-            className="entry"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="285.00"
-            inputMode="decimal"
-            autoComplete="off"
-          />
-        </label>
+      <SheetField label="Category">
+        <Select
+          value={category}
+          onChange={setCategory}
+          options={CATEGORIES}
+          labels={CATEGORY_LABEL}
+        />
+      </SheetField>
 
-        <label className="sheet__field">
-          <span className="field__label stamped">Category</span>
-          <select
-            className="entry"
-            value={category}
-            onChange={(e) => setCategory(e.target.value as TransactionCategory)}
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_LABEL[c]}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="sheet__field sheet__field--wide">
-          <span className="field__label stamped">Entry</span>
-          <input
-            className="entry"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Ace Plumbing, kitchen tap"
-            autoComplete="off"
-          />
-        </label>
-      </div>
-
-      {problem && <p className="hint hint--fault">{problem}</p>}
-
-      <div className="actions">
-        <button
-          type="button"
-          className="button button--primary"
-          onClick={() => void submit()}
-          disabled={saving}
-        >
-          {saving ? "Saving" : "Save entry"}
-        </button>
-        <button type="button" className="button" onClick={onCancel} disabled={saving}>
-          Cancel
-        </button>
-      </div>
-    </div>
+      <SheetField label="Entry" wide>
+        <input
+          className="entry"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Ace Plumbing, kitchen tap"
+          autoComplete="off"
+        />
+      </SheetField>
+    </SheetForm>
   );
 }
 

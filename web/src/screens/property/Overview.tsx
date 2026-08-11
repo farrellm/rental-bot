@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import { describeError } from "../../api/client";
@@ -12,6 +12,7 @@ import {
   useUpdateUnit,
 } from "../../api/queries";
 import type { PropertyStatus, Unit } from "../../api/types";
+import { AmendableRow } from "../../components/FieldRow";
 import { Stamp } from "../../components/Stamp";
 import { calendarDate, DASH, orDashNumber } from "../../format";
 import {
@@ -193,7 +194,12 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
       )}
 
       <dl className="card__fields">
-        <Row label="Nickname" editing={editing} value={draft.nickname || DASH} htmlFor="nickname">
+        <AmendableRow
+          label="Nickname"
+          editing={editing}
+          value={draft.nickname || DASH}
+          htmlFor="nickname"
+        >
           <input
             id="nickname"
             className={entryClass(problemFor("nickname"))}
@@ -201,9 +207,9 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
             onChange={(e) => set("nickname", e.target.value)}
             autoComplete="off"
           />
-        </Row>
+        </AmendableRow>
 
-        <Row
+        <AmendableRow
           label="Address"
           editing={editing}
           value={draft.address_line1 || DASH}
@@ -216,9 +222,9 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
             onChange={(e) => set("address_line1", e.target.value)}
             autoComplete="off"
           />
-        </Row>
+        </AmendableRow>
 
-        <Row
+        <AmendableRow
           label="Line 2"
           editing={editing}
           value={draft.address_line2 || DASH}
@@ -231,9 +237,9 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
             onChange={(e) => set("address_line2", e.target.value)}
             autoComplete="off"
           />
-        </Row>
+        </AmendableRow>
 
-        <Row
+        <AmendableRow
           label="City / State / ZIP"
           editing={editing}
           value={[draft.city, draft.state, draft.postal_code].filter(Boolean).join(" ") || DASH}
@@ -267,9 +273,14 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
               autoComplete="off"
             />
           </div>
-        </Row>
+        </AmendableRow>
 
-        <Row label="County" editing={editing} value={draft.county || DASH} htmlFor="county">
+        <AmendableRow
+          label="County"
+          editing={editing}
+          value={draft.county || DASH}
+          htmlFor="county"
+        >
           <input
             id="county"
             className="entry"
@@ -277,9 +288,12 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
             onChange={(e) => set("county", e.target.value)}
             autoComplete="off"
           />
-        </Row>
+        </AmendableRow>
 
-        <Row label="Status" editing={editing} value={draft.status} htmlFor="status">
+        {/* Not a Select: these options label themselves with the wire value,
+            the way the closed card reads it back. Giving them written-out
+            words would change what the record says. */}
+        <AmendableRow label="Status" editing={editing} value={draft.status} htmlFor="status">
           <select
             id="status"
             className="entry entry--short"
@@ -292,9 +306,9 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
               </option>
             ))}
           </select>
-        </Row>
+        </AmendableRow>
 
-        <Row
+        <AmendableRow
           label="Purchased"
           editing={editing}
           value={calendarDate(draft.purchase_date || null)}
@@ -310,9 +324,9 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
             inputMode="numeric"
             autoComplete="off"
           />
-        </Row>
+        </AmendableRow>
 
-        <Row
+        <AmendableRow
           label="Price"
           editing={editing}
           value={draft.purchase_price ? `$${draft.purchase_price}` : DASH}
@@ -328,9 +342,9 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
             inputMode="decimal"
             autoComplete="off"
           />
-        </Row>
+        </AmendableRow>
 
-        <Row
+        <AmendableRow
           label="Beds / Baths"
           editing={editing}
           value={`${orDashNumber(numberOrNull(draft.beds))} / ${orDashNumber(numberOrNull(draft.baths))}`}
@@ -358,9 +372,9 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
               autoComplete="off"
             />
           </div>
-        </Row>
+        </AmendableRow>
 
-        <Row
+        <AmendableRow
           label="Sq ft / Built"
           editing={editing}
           value={`${orDashNumber(numberOrNull(draft.sqft))} / ${orDashNumber(numberOrNull(draft.year_built))}`}
@@ -388,9 +402,15 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
               autoComplete="off"
             />
           </div>
-        </Row>
+        </AmendableRow>
 
-        <Row label="Notes" editing={editing} value={draft.notes || DASH} htmlFor="notes" block>
+        <AmendableRow
+          label="Notes"
+          editing={editing}
+          value={draft.notes || DASH}
+          htmlFor="notes"
+          block
+        >
           <textarea
             id="notes"
             className="entry"
@@ -398,12 +418,16 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
             onChange={(e) => set("notes", e.target.value)}
             rows={3}
           />
-        </Row>
+        </AmendableRow>
 
         {!editing && !isNew && (
-          <Row label="Match key" editing={false} value={property.data?.normalized_address || DASH}>
+          <AmendableRow
+            label="Match key"
+            editing={false}
+            value={property.data?.normalized_address || DASH}
+          >
             <span />
-          </Row>
+          </AmendableRow>
         )}
       </dl>
 
@@ -552,42 +576,6 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
         <Stamp state={editing ? "amending" : draft.status} />
       </footer>
     </>
-  );
-}
-
-interface RowProps {
-  label: string;
-  editing: boolean;
-  /** What the field reads as when the card is closed. */
-  value: ReactNode;
-  htmlFor?: string;
-  hint?: string;
-  /** Set when the entry is taller than one line, so the label aligns to its top. */
-  block?: boolean;
-  children: ReactNode;
-}
-
-/**
- * One ruled entry, in both states.
- *
- * The read value and the entry occupy the same row of the same grid, which is
- * what makes amending cost no reflow.
- */
-function Row({ label, editing, value, htmlFor, hint, block, children }: RowProps) {
-  const classes = ["field"];
-  if (editing) classes.push("field--entry");
-  if (editing && block) classes.push("field--block");
-
-  return (
-    <div className={classes.join(" ")}>
-      <dt className="field__label stamped">
-        {editing && htmlFor ? <label htmlFor={htmlFor}>{label}</label> : label}
-      </dt>
-      <dd className={editing ? "field__value" : "field__value mono"}>
-        {editing ? children : value}
-        {editing && hint && <p className="hint hint--fault">{hint}</p>}
-      </dd>
-    </div>
   );
 }
 

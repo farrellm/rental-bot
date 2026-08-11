@@ -13,6 +13,10 @@ import {
   useUpdateLease,
 } from "../../api/queries";
 import type { Lease, LeaseStatus } from "../../api/types";
+import { FieldRow } from "../../components/FieldRow";
+import { Select } from "../../components/Select";
+import { SheetField, SheetFilter } from "../../components/SheetField";
+import { SheetForm } from "../../components/SheetForm";
 import { Stamp, type StampState } from "../../components/Stamp";
 import { calendarDate, DASH, isCalendarDate, money, parseMoney, today } from "../../format";
 import { TermRule } from "./TermRule";
@@ -150,51 +154,37 @@ function Abstract({ lease, propertyId, onError }: AbstractProps) {
       {open && (
         <div className="abstract__body">
           <dl className="docket__facts">
-            <Fact label="Term">
+            <FieldRow label="Term">
               {calendarDate(lease.start_date)} to {lease.end_date ?? "month to month"}
-            </Fact>
-            <Fact label="Deposit">{money(lease.deposit_cents)}</Fact>
-            <Fact label="Rent due">{lease.due_day ? `Day ${lease.due_day}` : DASH}</Fact>
-            <Fact label="Late fee">{money(lease.late_fee_cents)}</Fact>
-            <Fact label="Tenants">
+            </FieldRow>
+            <FieldRow label="Deposit">{money(lease.deposit_cents)}</FieldRow>
+            <FieldRow label="Rent due">{lease.due_day ? `Day ${lease.due_day}` : DASH}</FieldRow>
+            <FieldRow label="Late fee">{money(lease.late_fee_cents)}</FieldRow>
+            <FieldRow label="Tenants">
               {detail.isPending
                 ? "…"
                 : tenants.length === 0
                   ? "None recorded"
                   : tenants.map((t) => `${t.name} (${t.role})`).join(", ")}
-            </Fact>
+            </FieldRow>
           </dl>
 
           <div className="abstract__actions">
-            <label className="sheet__filter">
-              <span className="sheet__filter-label stamped">Standing</span>
-              <select
-                className="entry entry--short"
+            <SheetFilter label="Standing">
+              <Select
                 value={lease.status}
-                onChange={(e) => void setStatus(e.target.value as LeaseStatus)}
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABEL[s]}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={(status) => void setStatus(status)}
+                options={STATUSES}
+                labels={STATUS_LABEL}
+                short
+              />
+            </SheetFilter>
 
             <AddTenant propertyId={propertyId} leaseId={lease.id} onError={onError} />
           </div>
         </div>
       )}
     </article>
-  );
-}
-
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="field">
-      <dt className="field__label stamped">{label}</dt>
-      <dd className="field__value mono">{children}</dd>
-    </div>
   );
 }
 
@@ -243,8 +233,7 @@ function AddTenant({
 
   return (
     <div className="abstract__tenant">
-      <label className="sheet__filter">
-        <span className="sheet__filter-label stamped">Add a tenant</span>
+      <SheetFilter label="Add a tenant">
         <input
           className="entry"
           value={name}
@@ -253,7 +242,7 @@ function AddTenant({
           list="tenant-names"
           autoComplete="off"
         />
-      </label>
+      </SheetFilter>
       <datalist id="tenant-names">
         {(tenants.data?.items ?? []).map((t) => (
           <option key={t.id} value={t.name} />
@@ -342,116 +331,88 @@ function LeaseForm({ units, onCancel, onSubmit }: LeaseFormProps) {
   }
 
   return (
-    <div className="sheet__form">
-      <h3 className="sheet__eyebrow stamped">New lease</h3>
-
-      <div className="sheet__form-rows">
-        <label className="sheet__field">
-          <span className="field__label stamped">Unit</span>
-          <select
-            className="entry"
-            value={unitId}
-            onChange={(e) => setUnitId(Number(e.target.value))}
-          >
-            {units.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="sheet__field">
-          <span className="field__label stamped">Starts</span>
-          <input
-            className="entry"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            placeholder="YYYY-MM-DD"
-            inputMode="numeric"
-            autoComplete="off"
-          />
-        </label>
-
-        <label className="sheet__field">
-          <span className="field__label stamped">Ends</span>
-          <input
-            className="entry"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            placeholder="Month to month"
-            inputMode="numeric"
-            autoComplete="off"
-          />
-        </label>
-
-        <label className="sheet__field">
-          <span className="field__label stamped">Rent</span>
-          <input
-            className="entry"
-            value={rent}
-            onChange={(e) => setRent(e.target.value)}
-            placeholder="1450.00"
-            inputMode="decimal"
-            autoComplete="off"
-          />
-        </label>
-
-        <label className="sheet__field">
-          <span className="field__label stamped">Deposit</span>
-          <input
-            className="entry"
-            value={deposit}
-            onChange={(e) => setDeposit(e.target.value)}
-            placeholder="1450.00"
-            inputMode="decimal"
-            autoComplete="off"
-          />
-        </label>
-
-        <label className="sheet__field">
-          <span className="field__label stamped">Rent due</span>
-          <input
-            className="entry"
-            value={dueDay}
-            onChange={(e) => setDueDay(e.target.value)}
-            placeholder="1"
-            inputMode="numeric"
-            autoComplete="off"
-          />
-        </label>
-
-        <label className="sheet__field">
-          <span className="field__label stamped">Standing</span>
-          <select
-            className="entry"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as LeaseStatus)}
-          >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABEL[s]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {problem && <p className="hint hint--fault">{problem}</p>}
-
-      <div className="actions">
-        <button
-          type="button"
-          className="button button--primary"
-          onClick={() => void submit()}
-          disabled={saving}
+    <SheetForm
+      title="New lease"
+      problem={problem}
+      saving={saving}
+      submitLabel="Enter the lease"
+      onSubmit={() => void submit()}
+      onCancel={onCancel}
+    >
+      {/* Not a Select: the options here are ids off the record rather than a
+          closed set with a word for each value. */}
+      <SheetField label="Unit">
+        <select
+          className="entry"
+          value={unitId}
+          onChange={(e) => setUnitId(Number(e.target.value))}
         >
-          {saving ? "Saving" : "Enter the lease"}
-        </button>
-        <button type="button" className="button" onClick={onCancel} disabled={saving}>
-          Cancel
-        </button>
-      </div>
-    </div>
+          {units.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.label}
+            </option>
+          ))}
+        </select>
+      </SheetField>
+
+      <SheetField label="Starts">
+        <input
+          className="entry"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          placeholder="YYYY-MM-DD"
+          inputMode="numeric"
+          autoComplete="off"
+        />
+      </SheetField>
+
+      <SheetField label="Ends">
+        <input
+          className="entry"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          placeholder="Month to month"
+          inputMode="numeric"
+          autoComplete="off"
+        />
+      </SheetField>
+
+      <SheetField label="Rent">
+        <input
+          className="entry"
+          value={rent}
+          onChange={(e) => setRent(e.target.value)}
+          placeholder="1450.00"
+          inputMode="decimal"
+          autoComplete="off"
+        />
+      </SheetField>
+
+      <SheetField label="Deposit">
+        <input
+          className="entry"
+          value={deposit}
+          onChange={(e) => setDeposit(e.target.value)}
+          placeholder="1450.00"
+          inputMode="decimal"
+          autoComplete="off"
+        />
+      </SheetField>
+
+      <SheetField label="Rent due">
+        <input
+          className="entry"
+          value={dueDay}
+          onChange={(e) => setDueDay(e.target.value)}
+          placeholder="1"
+          inputMode="numeric"
+          autoComplete="off"
+        />
+      </SheetField>
+
+      <SheetField label="Standing">
+        <Select value={status} onChange={setStatus} options={STATUSES} labels={STATUS_LABEL} />
+      </SheetField>
+    </SheetForm>
   );
 }
