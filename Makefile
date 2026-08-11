@@ -17,6 +17,16 @@ LDFLAGS := -s -w \
 
 NPM := npm --prefix web
 
+# Our own packages, which is not what `./...` means here.
+#
+# web/node_modules is inside the module, and npm dependencies are entitled to
+# ship whatever they like -- eslint pulls in flatted, which carries a Go
+# implementation of itself. `./...` walks into it, so `go vet` and staticcheck
+# would be reading third-party code and could fail this build over a file
+# nobody here wrote. The go tool has no exclude flag; listing and filtering is
+# the way.
+GOPKGS = $(shell go list ./... | grep -v '/web/node_modules/')
+
 .DEFAULT_GOAL := help
 .PHONY: help dev dev-api dev-web watch watch-dev build run migrate test test-web \
         fmt fmt-web fmt-check fmt-check-web vet lint lint-web check generate \
@@ -66,7 +76,7 @@ migrate: ## Apply pending migrations and exit
 check: fmt-check fmt-check-web vet lint lint-web test test-web ## Everything a commit has to pass
 
 test: ## Run the Go tests
-	go test ./...
+	go test $(GOPKGS)
 
 test-web: web-deps ## Type-check the frontend
 	@$(NPM) run typecheck
@@ -87,11 +97,11 @@ fmt-check-web: web-deps ## Fail if any frontend source is unformatted
 	@$(NPM) run format:check
 
 vet: ## Run go vet
-	go vet ./...
+	go vet $(GOPKGS)
 
 lint: ## Run staticcheck when it is installed
 	@if command -v staticcheck >/dev/null 2>&1; then \
-		staticcheck ./...; \
+		staticcheck $(GOPKGS); \
 	else \
 		echo "staticcheck not installed; skipping (go install honnef.co/go/tools/cmd/staticcheck@latest)"; \
 	fi
