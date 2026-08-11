@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -93,7 +94,10 @@ func (s *server) withRecover(next http.Handler) http.Handler {
 			if v == nil {
 				return
 			}
-			if v == http.ErrAbortHandler {
+			// ErrAbortHandler is net/http's way of saying the handler gave up
+			// deliberately; re-panicking is what the server expects, and it is
+			// not a condition worth an alert.
+			if err, ok := v.(error); ok && errors.Is(err, http.ErrAbortHandler) {
 				panic(v)
 			}
 			loggerFrom(r.Context()).Error("panic serving request",

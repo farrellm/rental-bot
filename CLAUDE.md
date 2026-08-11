@@ -91,7 +91,13 @@ decision, not a refactor.
   positive, expense negative.
 - **Calendar dates off documents are `TEXT` `YYYY-MM-DD`. Timestamps are
   RFC3339 UTC.** Documents rarely carry a timezone, and inventing one corrupts
-  the record silently.
+  the record silently. `domain.Stamp`, `domain.ParseStamp` and `domain.Today`
+  are the only spellings of either — don't add a package-local one. The format
+  is load-bearing beyond display: `jobs.run_after` and `jobs.locked_at` are
+  compared with `<` in SQL rather than parsed, which works only because RFC3339
+  at a fixed UTC offset sorts lexicographically the way it sorts
+  chronologically. A package with an injectable clock keeps the clock and calls
+  `domain.Stamp(x.now())`.
 - **Migrations are append-only and checksummed.** Never edit a migration that
   has been applied — the runner refuses to start when a recorded checksum
   changes. Corrections land as a new `NNNN_` file.

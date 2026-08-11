@@ -155,6 +155,7 @@ type listRow struct {
 	UnitCount int64
 }
 
+// listPage reads one page of properties, from the start or from a cursor.
 func (s *server) listPage(ctx context.Context, cursor string, limit int) ([]listRow, error) {
 	if cursor == "" {
 		rows, err := s.repo.Read().ListPropertiesFirstPage(ctx, int64(limit))
