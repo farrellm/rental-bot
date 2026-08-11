@@ -149,7 +149,6 @@ export function toPropertyWrite(
 
   const text = (key: keyof Draft & keyof PropertyWrite) => {
     if (original && draft[key] === original[key]) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (body as Record<string, unknown>)[key] = String(draft[key]).trim();
   };
 

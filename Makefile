@@ -19,8 +19,8 @@ NPM := npm --prefix web
 
 .DEFAULT_GOAL := help
 .PHONY: help dev dev-api dev-web watch watch-dev build run migrate test test-web \
-        fmt fmt-check vet lint check generate tidy web-deps web-install \
-        web-build web-clean clean db-shell
+        fmt fmt-web fmt-check fmt-check-web vet lint lint-web check generate \
+        tidy web-deps web-install web-build web-clean clean db-shell
 
 help: ## List the targets
 	@grep -hE '^[a-z][a-z-]*:.*?## ' $(MAKEFILE_LIST) \
@@ -60,7 +60,10 @@ migrate: ## Apply pending migrations and exit
 
 ## Checks --------------------------------------------------------------------
 
-check: fmt-check vet lint test test-web ## Everything a commit has to pass
+# Both halves, and the same three things asked of each: formatted, vetted,
+# linted, tested. The frontend went a long time with only the type-check, and
+# it drifted in exactly the ways an unenforced style drifts.
+check: fmt-check fmt-check-web vet lint lint-web test test-web ## Everything a commit has to pass
 
 test: ## Run the Go tests
 	go test ./...
@@ -71,11 +74,17 @@ test-web: web-deps ## Type-check the frontend
 fmt: ## Format the Go sources
 	gofmt -w .
 
-fmt-check: ## Fail if anything is unformatted
+fmt-web: web-deps ## Format the frontend sources
+	@$(NPM) run format
+
+fmt-check: ## Fail if any Go source is unformatted
 	@unformatted=$$(gofmt -l .); \
 	if [ -n "$$unformatted" ]; then \
 		echo "gofmt needed:"; echo "$$unformatted"; exit 1; \
 	fi
+
+fmt-check-web: web-deps ## Fail if any frontend source is unformatted
+	@$(NPM) run format:check
 
 vet: ## Run go vet
 	go vet ./...
@@ -86,6 +95,11 @@ lint: ## Run staticcheck when it is installed
 	else \
 		echo "staticcheck not installed; skipping (go install honnef.co/go/tools/cmd/staticcheck@latest)"; \
 	fi
+
+# No "skip when missing" branch, unlike staticcheck: eslint comes from the
+# lockfile, so web-deps has already installed it or nothing frontend works.
+lint-web: web-deps ## Lint the frontend
+	@$(NPM) run lint
 
 ## Codegen -------------------------------------------------------------------
 

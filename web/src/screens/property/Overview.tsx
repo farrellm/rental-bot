@@ -67,6 +67,10 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
   // Seed the draft from the record whenever a fresh one arrives, unless the
   // operator is part way through amending it — overwriting what they have
   // typed because a refetch landed would be its own kind of data loss.
+  // Seeding state from a query result is a cascading render, and the rule is
+  // right about it. Rewritten to React's render-phase idiom in a later commit;
+  // doing it here would mix a behaviour change into a tooling one.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!property.data || editing) return;
     setDraft(toDraft(property.data));
@@ -74,6 +78,7 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
     setUnits(toUnitDrafts(property.data.units));
     setOriginalUnits(toUnitDrafts(property.data.units));
   }, [property.data, editing]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
