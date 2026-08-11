@@ -51,8 +51,10 @@ func (m Money) String() string {
 		n = -n
 	}
 
+	cents := n % 100
 	whole := strconv.FormatInt(n/100, 10)
-	return sign + "$" + group(whole) + "." + fmt.Sprintf("%02d", n%100)
+	return sign + "$" + group(whole) + "." +
+		string([]byte{byte('0' + cents/10), byte('0' + cents%10)})
 }
 
 // group inserts thousands separators into a run of digits.

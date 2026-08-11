@@ -4,11 +4,11 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 
 	_ "modernc.org/sqlite" // pure-Go driver: static binary, FTS5 included
 )
@@ -103,17 +103,19 @@ func (db *DB) Ping(ctx context.Context) error {
 	return db.reader.PingContext(ctx)
 }
 
-// Close shuts both pools down, reporting the first failure.
+// Close shuts both pools down, reporting whatever failed.
+//
+// Both are closed even if the first one refuses, because leaving the writer
+// connection open would keep the WAL from being checkpointed.
 func (db *DB) Close() error {
-	var errs []string
-	if err := db.reader.Close(); err != nil {
-		errs = append(errs, "reader: "+err.Error())
+	readErr := db.reader.Close()
+	writeErr := db.writer.Close()
+
+	if readErr != nil {
+		readErr = fmt.Errorf("store: close reader: %w", readErr)
 	}
-	if err := db.writer.Close(); err != nil {
-		errs = append(errs, "writer: "+err.Error())
+	if writeErr != nil {
+		writeErr = fmt.Errorf("store: close writer: %w", writeErr)
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("store: close: %s", strings.Join(errs, "; "))
-	}
-	return nil
+	return errors.Join(readErr, writeErr)
 }

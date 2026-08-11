@@ -13,6 +13,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/farrellm/rental-bot/internal/config"
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/secret"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
@@ -168,7 +169,7 @@ func (s *Store) Connect(ctx context.Context, code string) (Account, error) {
 		return Account{}, err
 	}
 
-	stamp := s.now().Format(time.RFC3339)
+	stamp := domain.Stamp(s.now())
 	row, err := s.repo.Write().SaveGmailAccount(ctx, sqlc.SaveGmailAccountParams{
 		Address:         profile.EmailAddress,
 		RefreshTokenEnc: sealed,
@@ -309,7 +310,7 @@ func (p *persistingSource) Token() (*oauth2.Token, error) {
 		// problem.
 		return token, nil
 	}
-	stamp := p.store.now().Format(time.RFC3339)
+	stamp := domain.Stamp(p.store.now())
 	if err := p.store.repo.Write().SetGmailRefreshToken(context.Background(), sqlc.SetGmailRefreshTokenParams{
 		RefreshTokenEnc: sealed, UpdatedAt: stamp,
 	}); err == nil {
@@ -320,7 +321,7 @@ func (p *persistingSource) Token() (*oauth2.Token, error) {
 
 // RecordSync advances the cursor after a successful walk.
 func (s *Store) RecordSync(ctx context.Context, historyID uint64, count int64) error {
-	stamp := s.now().Format(time.RFC3339)
+	stamp := domain.Stamp(s.now())
 	err := s.repo.Write().SetGmailCursor(ctx, sqlc.SetGmailCursorParams{
 		HistoryID:     formatHistoryID(historyID),
 		LastSyncAt:    stamp,
@@ -335,10 +336,10 @@ func (s *Store) RecordSync(ctx context.Context, historyID uint64, count int64) e
 
 // RecordWatch stores when the push registration expires.
 func (s *Store) RecordWatch(ctx context.Context, expires time.Time) error {
-	stamp := s.now().Format(time.RFC3339)
+	stamp := domain.Stamp(s.now())
 	var expiry *string
 	if !expires.IsZero() {
-		formatted := expires.UTC().Format(time.RFC3339)
+		formatted := domain.Stamp(expires)
 		expiry = &formatted
 	}
 	err := s.repo.Write().SetGmailWatch(ctx, sqlc.SetGmailWatchParams{
@@ -364,7 +365,7 @@ func (s *Store) RecordFailure(ctx context.Context, cause error) error {
 		detail = detail[:500] + "..."
 	}
 
-	stamp := s.now().Format(time.RFC3339)
+	stamp := domain.Stamp(s.now())
 	err := s.repo.Write().SetGmailStatus(ctx, sqlc.SetGmailStatusParams{
 		Status: status, LastError: detail, UpdatedAt: stamp,
 	})

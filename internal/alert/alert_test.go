@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 	"github.com/farrellm/rental-bot/migrations"
@@ -47,7 +48,7 @@ func (r *recorder) all() []Notice {
 // openBus returns a bus over a real migrated database. The cooldown rests on a
 // partial unique index, and an index is only worth trusting against the real
 // schema.
-func openBus(t *testing.T) (*Bus, *recorder) {
+func openBus(t testing.TB) (*Bus, *recorder) {
 	t.Helper()
 
 	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "alert.db"), 2)
@@ -319,9 +320,9 @@ func TestSeverityMatchesTheSchema(t *testing.T) {
 			Channel:     "telegram",
 			Severity:    string(s),
 			Title:       "a condition",
-			FirstSeenAt: stamp(time.Now()),
-			CreatedAt:   stamp(time.Now()),
-			UpdatedAt:   stamp(time.Now()),
+			FirstSeenAt: domain.Stamp(time.Now()),
+			CreatedAt:   domain.Stamp(time.Now()),
+			UpdatedAt:   domain.Stamp(time.Now()),
 		}); err != nil {
 			t.Errorf("the schema refused severity %q: %v", s, err)
 		}

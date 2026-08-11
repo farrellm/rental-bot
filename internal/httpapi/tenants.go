@@ -1,12 +1,10 @@
 package httpapi
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
 
@@ -33,6 +31,9 @@ func newTenantResponse(t sqlc.Tenant) tenantResponse {
 		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}
 }
+
+// recTenant names a tenant for the shared error answers.
+var recTenant = record{noun: "tenant"}
 
 func (s *server) routeTenants(mux *http.ServeMux) {
 	route(mux, "/api/v1/tenants", methods{
@@ -69,7 +70,7 @@ func (s *server) handleGetTenant(w http.ResponseWriter, r *http.Request) {
 	}
 	tenant, err := s.repo.Read().GetTenant(r.Context(), id)
 	if err != nil {
-		s.tenantReadError(w, r, err)
+		s.readError(w, r, recTenant, err)
 		return
 	}
 	writeJSON(w, r, http.StatusOK, newTenantResponse(tenant))
@@ -131,15 +132,13 @@ func (s *server) handleUpdateTenant(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		for _, apply := range []func() error{
-			func() error { return p.required("name", &current.Name) },
-			func() error { return p.required("email", &current.Email) },
-			func() error { return p.required("phone", &current.Phone) },
-			func() error { return p.required("notes", &current.Notes) },
-		} {
-			if err := apply(); err != nil {
-				return validationError{err.Error()}
-			}
+		if err := p.apply(
+			required("name", &current.Name),
+			required("email", &current.Email),
+			required("phone", &current.Phone),
+			required("notes", &current.Notes),
+		); err != nil {
+			return err
 		}
 
 		current.Name = strings.TrimSpace(current.Name)
@@ -158,7 +157,7 @@ func (s *server) handleUpdateTenant(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if err != nil {
-		s.tenantWriteError(w, r, err)
+		s.writeError(w, r, recTenant, err)
 		return
 	}
 	writeJSON(w, r, http.StatusOK, newTenantResponse(updated))
@@ -185,26 +184,4 @@ func (s *server) handleDeleteTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *server) tenantReadError(w http.ResponseWriter, r *http.Request, err error) {
-	if store.NotFound(err) {
-		WriteProblem(w, r, http.StatusNotFound, "No such tenant.")
-		return
-	}
-	loggerFrom(r.Context()).Error("read tenant", "error", err)
-	WriteProblem(w, r, http.StatusInternalServerError, "Could not read the tenant.")
-}
-
-func (s *server) tenantWriteError(w http.ResponseWriter, r *http.Request, err error) {
-	var invalid validationError
-	switch {
-	case errors.As(err, &invalid):
-		WriteProblem(w, r, http.StatusUnprocessableEntity, invalid.detail)
-	case store.NotFound(err):
-		WriteProblem(w, r, http.StatusNotFound, "No such tenant.")
-	default:
-		loggerFrom(r.Context()).Error("write tenant", "error", err)
-		WriteProblem(w, r, http.StatusInternalServerError, "Could not save the tenant.")
-	}
 }

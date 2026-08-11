@@ -1,6 +1,7 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -9,10 +10,12 @@ import (
 	"fmt"
 	"io/fs"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/farrellm/rental-bot/internal/domain"
 )
 
 // Migration is one applied migration, as recorded in schema_migrations.
@@ -24,9 +27,7 @@ type Migration struct {
 }
 
 // Filename reconstructs the file this migration came from.
-func (m Migration) Filename() string {
-	return fmt.Sprintf("%04d_%s.sql", m.Version, m.Name)
-}
+func (m Migration) Filename() string { return migrationFilename(m.Version, m.Name) }
 
 // ErrChecksumMismatch reports a migration that changed after it was applied.
 var ErrChecksumMismatch = errors.New("store: applied migration has changed on disk")
@@ -90,7 +91,7 @@ func (db *DB) apply(ctx context.Context, f migrationFile) (Migration, error) {
 	if err != nil {
 		return Migration{}, fmt.Errorf("store: %s: %w", f.Filename(), err)
 	}
-	defer tx.Rollback()
+	defer tx.Rollback() //nolint:errcheck // rollback after commit is a no-op
 
 	if _, err := tx.ExecContext(ctx, f.SQL); err != nil {
 		return Migration{}, fmt.Errorf("store: %s: %w", f.Filename(), err)
@@ -100,7 +101,7 @@ func (db *DB) apply(ctx context.Context, f migrationFile) (Migration, error) {
 		Version:   f.Version,
 		Name:      f.Name,
 		Checksum:  f.Checksum,
-		AppliedAt: time.Now().UTC().Format(time.RFC3339),
+		AppliedAt: domain.Stamp(time.Now()),
 	}
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)`,
@@ -125,20 +126,7 @@ func (db *DB) Applied(ctx context.Context) ([]Migration, error) {
 		}
 		return nil, fmt.Errorf("store: read schema_migrations: %w", err)
 	}
-	defer rows.Close()
-
-	var out []Migration
-	for rows.Next() {
-		var m Migration
-		if err := rows.Scan(&m.Version, &m.Name, &m.Checksum, &m.AppliedAt); err != nil {
-			return nil, fmt.Errorf("store: read schema_migrations: %w", err)
-		}
-		out = append(out, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("store: read schema_migrations: %w", err)
-	}
-	return out, nil
+	return scanMigrations(rows)
 }
 
 // SchemaVersion reports the highest applied migration version, or 0 if the
@@ -165,8 +153,12 @@ type migrationFile struct {
 }
 
 // Filename reconstructs the file's name for error messages.
-func (f migrationFile) Filename() string {
-	return fmt.Sprintf("%04d_%s.sql", f.Version, f.Name)
+func (f migrationFile) Filename() string { return migrationFilename(f.Version, f.Name) }
+
+// migrationFilename is the NNNN_name.sql spelling, which is both how a
+// migration is found on disk and how it is named in an error.
+func migrationFilename(version int, name string) string {
+	return fmt.Sprintf("%04d_%s.sql", version, name)
 }
 
 // loadMigrations reads and validates every *.sql in fsys, in version order.
@@ -204,7 +196,7 @@ func loadMigrations(fsys fs.FS) ([]migrationFile, error) {
 			SQL:      string(body),
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Version < out[j].Version })
+	slices.SortFunc(out, func(a, b migrationFile) int { return cmp.Compare(a.Version, b.Version) })
 	return out, nil
 }
 
@@ -215,15 +207,29 @@ func appliedByVersion(ctx context.Context, db *sql.DB) (map[int]Migration, error
 	if err != nil {
 		return nil, fmt.Errorf("store: read schema_migrations: %w", err)
 	}
+	recorded, err := scanMigrations(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(map[int]Migration, len(recorded))
+	for _, m := range recorded {
+		out[m.Version] = m
+	}
+	return out, nil
+}
+
+// scanMigrations reads a schema_migrations result set, closing it.
+func scanMigrations(rows *sql.Rows) ([]Migration, error) {
 	defer rows.Close()
 
-	out := make(map[int]Migration)
+	var out []Migration
 	for rows.Next() {
 		var m Migration
 		if err := rows.Scan(&m.Version, &m.Name, &m.Checksum, &m.AppliedAt); err != nil {
 			return nil, fmt.Errorf("store: read schema_migrations: %w", err)
 		}
-		out[m.Version] = m
+		out = append(out, m)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("store: read schema_migrations: %w", err)

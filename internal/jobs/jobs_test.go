@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 	"github.com/farrellm/rental-bot/migrations"
@@ -173,7 +174,7 @@ func TestFailureRetriesThenGivesUp(t *testing.T) {
 		// Pretend the backoff has elapsed. The first pass is a no-op; the two
 		// after it pull run_after back to now so the job is claimable again.
 		if err := queue.repo.Write().RetryJob(t.Context(), sqlc.RetryJobParams{
-			RunAfter: stamp(time.Now()), UpdatedAt: stamp(time.Now()), ID: id,
+			RunAfter: domain.Stamp(time.Now()), UpdatedAt: domain.Stamp(time.Now()), ID: id,
 		}); err != nil {
 			t.Fatalf("make the job runnable: %v", err)
 		}
@@ -233,7 +234,7 @@ func TestDeadLetterIsReportedOnce(t *testing.T) {
 	}
 	for range 2 {
 		if err := queue.repo.Write().RetryJob(t.Context(), sqlc.RetryJobParams{
-			RunAfter: stamp(time.Now()), UpdatedAt: stamp(time.Now()), ID: id,
+			RunAfter: domain.Stamp(time.Now()), UpdatedAt: domain.Stamp(time.Now()), ID: id,
 		}); err != nil {
 			t.Fatalf("make the job runnable: %v", err)
 		}

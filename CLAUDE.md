@@ -26,6 +26,12 @@ the Review inbox.
 | `make generate` | Regenerate the sqlc query layer; skips when sqlc is absent |
 | `make test` / `make test-web` | Either half of the test suite alone |
 
+`.github/workflows/check.yml` runs `make check` and `make build` on every pull
+request, plus `go test -race ./...`, which `make check` leaves out to stay quick
+enough to run before a commit. CI installs staticcheck and then asserts it is on
+PATH — `make lint` skips with a message and exits 0 without it, which is the
+right default for a fresh clone and the wrong one for a merge gate.
+
 `./bin/rental-bot -create-user <name>` is the only way a user is created.
 There is no registration endpoint by design. `-unpair-telegram` is the only way
 to change who the alert channel trusts, for the same kind of reason.
@@ -91,7 +97,13 @@ decision, not a refactor.
   positive, expense negative.
 - **Calendar dates off documents are `TEXT` `YYYY-MM-DD`. Timestamps are
   RFC3339 UTC.** Documents rarely carry a timezone, and inventing one corrupts
-  the record silently.
+  the record silently. `domain.Stamp`, `domain.ParseStamp` and `domain.Today`
+  are the only spellings of either — don't add a package-local one. The format
+  is load-bearing beyond display: `jobs.run_after` and `jobs.locked_at` are
+  compared with `<` in SQL rather than parsed, which works only because RFC3339
+  at a fixed UTC offset sorts lexicographically the way it sorts
+  chronologically. A package with an injectable clock keeps the clock and calls
+  `domain.Stamp(x.now())`.
 - **Migrations are append-only and checksummed.** Never edit a migration that
   has been applied — the runner refuses to start when a recorded checksum
   changes. Corrections land as a new `NNNN_` file.

@@ -19,6 +19,7 @@ import (
 	"github.com/farrellm/rental-bot/internal/auth"
 	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/gmail"
 	"github.com/farrellm/rental-bot/internal/httpapi"
 	"github.com/farrellm/rental-bot/internal/jobs"
@@ -70,10 +71,7 @@ type modes struct {
 }
 
 func run(m modes) error {
-	configPath := m.configPath
-	migrateOnly := m.migrateOnly
-	newUser := m.newUser
-	cfg, err := config.Load(configPath)
+	cfg, err := config.Load(m.configPath)
 	if err != nil {
 		return err
 	}
@@ -86,33 +84,21 @@ func run(m modes) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	db, err := store.Open(ctx, cfg.Database.Path, cfg.Database.ReadPoolSize)
+	db, schema, err := openDatabase(ctx, cfg, logger)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	applied, err := db.Migrate(ctx, migrations.FS)
-	if err != nil {
-		return err
-	}
-	for _, m := range applied {
-		logger.Info("applied migration", "version", m.Version, "file", m.Filename())
-	}
-
-	schemaVersion, err := db.SchemaVersion(ctx)
-	if err != nil {
-		return err
-	}
-	if migrateOnly {
-		logger.Info("migrations up to date", "schema_version", schemaVersion, "applied", len(applied))
+	if m.migrateOnly {
+		logger.Info("migrations up to date", "schema_version", schema.version, "applied", schema.applied)
 		return nil
 	}
 
 	// After the migrations, because the tables have to exist, and before the
 	// server, because neither of these is a server mode.
-	if newUser != "" {
-		return createUser(ctx, db, newUser)
+	if m.newUser != "" {
+		return createUser(ctx, db, m.newUser)
 	}
 	if m.unpair {
 		return unpairTelegram(ctx, db)
@@ -133,14 +119,175 @@ func run(m modes) error {
 	secure := strings.HasPrefix(cfg.Server.BaseURL, "https://")
 	guard := auth.NewGuard(auth.NewSessions(repo), auth.NewCSRF(cfg.Secrets.Key), secure, httpapi.WriteProblem)
 
-	// The queue and the pool that drains it. Everything the webhook and the
-	// scheduler want done goes through here rather than running inline, so a
-	// Pub/Sub push is answered in milliseconds and a Gmail history walk
-	// happens on a worker with retries behind it.
-	// The alert bus exists whether or not there is a channel to send on. The
-	// log sink is always subscribed, so a condition raised on a host that has
-	// never paired is still recorded and still on the dispatch register — and
-	// the wiring below does not have to check for a nil bus.
+	bg := wireBackground(cfg, repo, logger)
+
+	// Ingestion is optional. A fresh clone has no Google project, and the whole
+	// subsystem stays unbuilt rather than being built and left to fail: no
+	// handlers, no scheduled polls, and a screen that says it is not configured.
+	ingestion, err := wireIngestion(cfg, repo, blobs, bg.runner, bg.ticker, logger)
+	if err != nil {
+		return err
+	}
+	if ingestion.tokens != nil {
+		bg.watchdog.Add("gmail", gmail.Probe(ingestion.tokens, cfg.Telegram.SilenceAfter.Duration, nil))
+	}
+
+	// The channel is optional too, and for the same reason: nobody has to want
+	// a bot for the rest of this to work.
+	channel, err := wireTelegram(cfg, repo, bg.bus, bg.queue, bg.runner, logger)
+	if err != nil {
+		return err
+	}
+
+	started := time.Now()
+	srv := newHTTPServer(cfg, logger, httpapi.Options{
+		Config:       cfg,
+		DB:           db,
+		Repo:         repo,
+		Blobs:        blobs,
+		Guard:        guard,
+		Queue:        bg.queue,
+		Runner:       bg.runner,
+		Gmail:        ingestion.tokens,
+		Archive:      ingestion.archive,
+		PushVerifier: ingestion.verifier,
+		Alerts:       bg.bus,
+		Telegram:     channel.store,
+		Limiter:      auth.NewLimiter(),
+		Logger:       logger,
+		SPA:          web.SPA(),
+		StartedAt:    started,
+	})
+
+	logger.Info("starting",
+		"version", version.Version,
+		"commit", version.Commit,
+		"go", version.GoVersion(),
+		"addr", cfg.Server.Addr,
+		"database", cfg.Database.Path,
+		"schema_version", schema.version,
+		"spa_embedded", web.Embedded,
+		"workers", cfg.Jobs.Workers,
+		"gmail", cfg.Gmail.Enabled(),
+		"telegram", cfg.Telegram.Enabled(),
+	)
+
+	// Background work starts before the listener: a job that was mid-run when
+	// the last process stopped should be reclaimed and retried whether or not
+	// anyone is calling the API.
+	//
+	// The context here is the signal context, so a Ctrl-C stops the workers at
+	// the same instant it stops accepting requests, and Stop below is what
+	// waits for the work in flight.
+	bg.runner.Start(ctx)
+	bg.ticker.Start(ctx)
+	if channel.sender != nil {
+		channel.sender.Start(ctx)
+	}
+	if channel.poller != nil {
+		channel.poller.Start(ctx)
+	}
+
+	// §8.3's Host class: the operator should be able to tell a restart they
+	// asked for from one they did not.
+	//
+	// One condition, never resolved. A restart is not news on its own — a
+	// deploy is a restart — but a *rate* of restarts is, and that is exactly
+	// what the tally in the dispatch register shows: one line saying "started,
+	// 7 times since Tuesday" rather than seven lines saying "started". A clean
+	// shutdown deliberately says nothing here; the log records it, and a
+	// message announcing that the process has gone away arrives too late to be
+	// worth anybody's attention.
+	bg.bus.Publish(ctx, alert.Alert{
+		Key:      keyProcessStarted,
+		Severity: alert.Info,
+		Title:    "rental-bot started",
+		Detail:   alert.Errorf("Version %s, schema %d.", version.Version, schema.version),
+	})
+
+	errc := make(chan error, 1)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errc <- err
+			return
+		}
+		errc <- nil
+	}()
+
+	select {
+	case err := <-errc:
+		return err
+	case <-ctx.Done():
+		stop() // a second signal now kills the process outright
+		logger.Info("shutting down", "timeout", shutdownTimeout)
+	}
+
+	if err := shutdown(srv, bg, channel, logger); err != nil {
+		return err
+	}
+
+	logger.Info("stopped", "uptime", time.Since(started).Round(time.Second).String())
+	return nil
+}
+
+// schemaState is where a migration run left the database.
+type schemaState struct {
+	// version is the highest applied migration.
+	version int
+	// applied is how many ran just now, which is zero on an already-current
+	// database.
+	applied int
+}
+
+// openDatabase opens the file and applies whatever is pending.
+func openDatabase(ctx context.Context, cfg config.Config, logger *slog.Logger) (*store.DB, schemaState, error) {
+	db, err := store.Open(ctx, cfg.Database.Path, cfg.Database.ReadPoolSize)
+	if err != nil {
+		return nil, schemaState{}, err
+	}
+
+	applied, err := db.Migrate(ctx, migrations.FS)
+	if err != nil {
+		db.Close()
+		return nil, schemaState{}, err
+	}
+	for _, m := range applied {
+		logger.Info("applied migration", "version", m.Version, "file", m.Filename())
+	}
+
+	version, err := db.SchemaVersion(ctx)
+	if err != nil {
+		db.Close()
+		return nil, schemaState{}, err
+	}
+	return db, schemaState{version: version, applied: len(applied)}, nil
+}
+
+// background is the half of the process that runs without anyone asking: the
+// queue, the pool that drains it, the ticker that feeds it, and the alert bus
+// everything reports to.
+//
+// Unlike ingestion and channel, none of these is optional. They exist on every
+// host, which is what lets the rest of the wiring skip the nil checks.
+type background struct {
+	bus      *alert.Bus
+	queue    *jobs.Queue
+	runner   *jobs.Runner
+	ticker   *scheduler.Scheduler
+	watchdog *alert.Watchdog
+}
+
+// wireBackground builds that half.
+//
+// Everything the webhook and the scheduler want done is enqueued rather than
+// run inline, so a Pub/Sub push is answered in milliseconds and a Gmail history
+// walk happens on a worker with retries behind it.
+//
+// The alert bus exists whether or not there is a channel to send on. The log
+// sink is always subscribed, so a condition raised on a host that has never
+// paired is still recorded and still on the dispatch register — and nothing
+// downstream has to check for a nil bus.
+func wireBackground(cfg config.Config, repo *store.Repo, logger *slog.Logger) background {
 	bus := alert.New(repo, alert.Options{
 		Cooldown:         cfg.Telegram.Cooldown.Duration,
 		CriticalCooldown: cfg.Telegram.CriticalCooldown.Duration,
@@ -183,47 +330,14 @@ func run(m modes) error {
 		AtStart: true,
 	})
 
-	// Ingestion is optional. A fresh clone has no Google project, and the whole
-	// subsystem stays unbuilt rather than being built and left to fail: no
-	// handlers, no scheduled polls, and a screen that says it is not configured.
-	ingestion, err := wireIngestion(cfg, repo, blobs, runner, ticker, logger)
-	if err != nil {
-		return err
-	}
-	if ingestion.tokens != nil {
-		watchdog.Add("gmail", gmail.Probe(ingestion.tokens, cfg.Telegram.SilenceAfter.Duration, nil))
-	}
+	return background{bus: bus, queue: queue, runner: runner, ticker: ticker, watchdog: watchdog}
+}
 
-	// The channel is optional too, and for the same reason: nobody has to want
-	// a bot for the rest of this to work.
-	channel, err := wireTelegram(cfg, repo, bus, queue, runner, logger)
-	if err != nil {
-		return err
-	}
-
-	started := time.Now()
-	handler := httpapi.New(httpapi.Options{
-		Config:       cfg,
-		DB:           db,
-		Repo:         repo,
-		Blobs:        blobs,
-		Guard:        guard,
-		Queue:        queue,
-		Runner:       runner,
-		Gmail:        ingestion.tokens,
-		Archive:      ingestion.archive,
-		PushVerifier: ingestion.verifier,
-		Alerts:       bus,
-		Telegram:     channel.store,
-		Limiter:      auth.NewLimiter(),
-		Logger:       logger,
-		SPA:          web.SPA(),
-		StartedAt:    started,
-	})
-
-	srv := &http.Server{
+// newHTTPServer builds the listener around the API handler.
+func newHTTPServer(cfg config.Config, logger *slog.Logger, opts httpapi.Options) *http.Server {
+	return &http.Server{
 		Addr:    cfg.Server.Addr,
-		Handler: handler,
+		Handler: httpapi.New(opts),
 		// Slow-loris protection and a bound on a stuck client. The write
 		// timeout is generous because document downloads land in M2.
 		ReadHeaderTimeout: 10 * time.Second,
@@ -232,73 +346,18 @@ func run(m modes) error {
 		IdleTimeout:       120 * time.Second,
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
 	}
+}
 
-	logger.Info("starting",
-		"version", version.Version,
-		"commit", version.Commit,
-		"go", version.GoVersion(),
-		"addr", cfg.Server.Addr,
-		"database", cfg.Database.Path,
-		"schema_version", schemaVersion,
-		"spa_embedded", web.Embedded,
-		"workers", cfg.Jobs.Workers,
-		"gmail", cfg.Gmail.Enabled(),
-		"telegram", cfg.Telegram.Enabled(),
-	)
-
-	// Background work starts before the listener: a job that was mid-run when
-	// the last process stopped should be reclaimed and retried whether or not
-	// anyone is calling the API.
-	//
-	// The context here is the signal context, so a Ctrl-C stops the workers at
-	// the same instant it stops accepting requests, and Stop below is what
-	// waits for the work in flight.
-	runner.Start(ctx)
-	ticker.Start(ctx)
-	if channel.sender != nil {
-		channel.sender.Start(ctx)
-	}
-	if channel.poller != nil {
-		channel.poller.Start(ctx)
-	}
-
-	// §8.3's Host class: the operator should be able to tell a restart they
-	// asked for from one they did not.
-	//
-	// One condition, never resolved. A restart is not news on its own — a
-	// deploy is a restart — but a *rate* of restarts is, and that is exactly
-	// what the tally in the dispatch register shows: one line saying "started,
-	// 7 times since Tuesday" rather than seven lines saying "started". A clean
-	// shutdown deliberately says nothing here; the log records it, and a
-	// message announcing that the process has gone away arrives too late to be
-	// worth anybody's attention.
-	bus.Publish(ctx, alert.Alert{
-		Key:      keyProcessStarted,
-		Severity: alert.Info,
-		Title:    "rental-bot started",
-		Detail:   alert.Errorf("Version %s, schema %d.", version.Version, schemaVersion),
-	})
-
-	errc := make(chan error, 1)
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errc <- err
-			return
-		}
-		errc <- nil
-	}()
-
-	select {
-	case err := <-errc:
-		return err
-	case <-ctx.Done():
-		stop() // a second signal now kills the process outright
-		logger.Info("shutting down", "timeout", shutdownTimeout)
-	}
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+// shutdown stops everything, in an order that is the point of the function.
+//
+// The listener first, so nothing new arrives. Then the background work, then
+// the alert channel last of all -- and within the channel, the poller before
+// the sender.
+func shutdown(srv *http.Server, bg background, channel channel, logger *slog.Logger) error {
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
+
+	if err := srv.Shutdown(ctx); err != nil {
 		return fmt.Errorf("shutdown: %w", err)
 	}
 
@@ -306,17 +365,17 @@ func run(m modes) error {
 	// this waits for what is in flight. A job that does not finish in time
 	// stays locked, and the next process's reclaim sweep returns it to pending
 	// -- the same path a kill -9 takes.
-	if err := ticker.Stop(shutdownCtx); err != nil {
+	if err := bg.ticker.Stop(ctx); err != nil {
 		logger.Warn("scheduler did not stop cleanly", "error", err)
 	}
-	if err := runner.Stop(shutdownCtx); err != nil {
+	if err := bg.runner.Stop(ctx); err != nil {
 		logger.Warn("job workers did not stop cleanly", "error", err)
 	}
 
 	// The poller before the sender: the poller can still be told to pair, and
 	// the sender is what has to be alive to say hello afterwards.
 	if channel.poller != nil {
-		if err := channel.poller.Stop(shutdownCtx); err != nil {
+		if err := channel.poller.Stop(ctx); err != nil {
 			// Expected, and not worth an error line: the long poll is parked
 			// on a socket read Telegram holds for up to fifty seconds. Nothing
 			// is lost, because the cursor is on disk.
@@ -327,12 +386,10 @@ func run(m modes) error {
 		// Last, so anything raised on the way down still has somewhere to go —
 		// and so what it cannot deliver reaches the spool rather than the
 		// floor.
-		if err := channel.sender.Stop(shutdownCtx); err != nil {
+		if err := channel.sender.Stop(ctx); err != nil {
 			logger.Warn("the alert sender did not stop cleanly", "error", err)
 		}
 	}
-
-	logger.Info("stopped", "uptime", time.Since(started).Round(time.Second).String())
 	return nil
 }
 
@@ -499,7 +556,7 @@ func logPairingCode(ctx context.Context, tokens *telegram.Store, username string
 	logger.Warn("the alert channel is not paired",
 		"send", "/start "+code,
 		"to", "@"+username,
-		"expires", expires.Format(time.RFC3339),
+		"expires", domain.Stamp(expires),
 	)
 }
 

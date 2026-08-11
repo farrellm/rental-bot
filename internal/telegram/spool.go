@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
+
+	"github.com/farrellm/rental-bot/internal/domain"
 )
 
 // spoolLimit bounds how many undelivered messages are kept.
@@ -78,7 +80,7 @@ func (s *Spool) Pending() ([]string, error) {
 	}
 	// The name starts with a zero-padded nanosecond count, so lexicographic is
 	// chronological -- the same trick the RFC3339 timestamps in SQL rely on.
-	sort.Strings(names)
+	slices.Sort(names)
 	return names, nil
 }
 
@@ -109,8 +111,11 @@ func (s *Spool) trim() error {
 	if err != nil {
 		return err
 	}
-	for i := 0; i < len(names)-spoolLimit; i++ {
-		if err := s.Remove(names[i]); err != nil {
+	if len(names) <= spoolLimit {
+		return nil
+	}
+	for _, name := range names[:len(names)-spoolLimit] {
+		if err := s.Remove(name); err != nil {
 			return err
 		}
 	}
@@ -133,5 +138,5 @@ func safeName(key string) string {
 	if name == "" {
 		return "unkeyed"
 	}
-	return truncate(name, 64)
+	return domain.Truncate(name, 64)
 }

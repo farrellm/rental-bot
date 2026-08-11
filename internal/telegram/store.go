@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
@@ -146,8 +147,8 @@ func (s *Store) IssuePairingCode(ctx context.Context) (code string, expires time
 
 	if err := s.repo.Write().SetTelegramPairingCode(ctx, sqlc.SetTelegramPairingCodeParams{
 		PairingCodeHash:  hashCode(code),
-		PairingExpiresAt: stamp(expires),
-		UpdatedAt:        stamp(at),
+		PairingExpiresAt: domain.Stamp(expires),
+		UpdatedAt:        domain.Stamp(at),
 	}); err != nil {
 		return "", time.Time{}, fmt.Errorf("telegram: store the pairing code: %w", err)
 	}
@@ -165,10 +166,10 @@ func (s *Store) Pair(ctx context.Context, code string, chatID int64) error {
 
 	paired, err := s.repo.Write().PairTelegram(ctx, sqlc.PairTelegramParams{
 		ChatID:          chatID,
-		PairedAt:        stamp(at),
-		UpdatedAt:       stamp(at),
+		PairedAt:        domain.Stamp(at),
+		UpdatedAt:       domain.Stamp(at),
 		PairingCodeHash: hashCode(code),
-		Now:             stamp(at),
+		Now:             domain.Stamp(at),
 	})
 	if err != nil {
 		return fmt.Errorf("telegram: pair the chat: %w", err)
@@ -204,12 +205,12 @@ func (s *Store) Mute(ctx context.Context, until time.Time) error {
 
 	var value *string
 	if !until.IsZero() {
-		v := stamp(until)
+		v := domain.Stamp(until)
 		value = &v
 	}
 	if err := s.repo.Write().SetTelegramMute(ctx, sqlc.SetTelegramMuteParams{
 		MutedUntil: value,
-		UpdatedAt:  stamp(at),
+		UpdatedAt:  domain.Stamp(at),
 	}); err != nil {
 		return fmt.Errorf("telegram: set the mute: %w", err)
 	}
@@ -220,7 +221,7 @@ func (s *Store) Mute(ctx context.Context, until time.Time) error {
 func (s *Store) SetCursor(ctx context.Context, updateID int64) error {
 	if err := s.repo.Write().SetTelegramCursor(ctx, sqlc.SetTelegramCursorParams{
 		LastUpdateID: updateID,
-		UpdatedAt:    stamp(s.now()),
+		UpdatedAt:    domain.Stamp(s.now()),
 	}); err != nil {
 		return fmt.Errorf("telegram: advance the update cursor: %w", err)
 	}
@@ -232,8 +233,8 @@ func (s *Store) SetCursor(ctx context.Context, updateID int64) error {
 func (s *Store) RecordSent(ctx context.Context) error {
 	at := s.now()
 	if err := s.repo.Write().RecordTelegramSent(ctx, sqlc.RecordTelegramSentParams{
-		LastSentAt: stamp(at),
-		UpdatedAt:  stamp(at),
+		LastSentAt: domain.Stamp(at),
+		UpdatedAt:  domain.Stamp(at),
 	}); err != nil {
 		return fmt.Errorf("telegram: record the delivery: %w", err)
 	}
@@ -248,8 +249,8 @@ func (s *Store) RecordFailure(ctx context.Context, cause error) error {
 	at := s.now()
 	if err := s.repo.Write().SetTelegramStatus(ctx, sqlc.SetTelegramStatusParams{
 		Status:    "degraded",
-		LastError: truncate(cause.Error(), errorLimit),
-		UpdatedAt: stamp(at),
+		LastError: domain.Truncate(cause.Error(), errorLimit),
+		UpdatedAt: domain.Stamp(at),
 	}); err != nil {
 		return fmt.Errorf("telegram: record the failure: %w", err)
 	}
@@ -260,8 +261,8 @@ func (s *Store) RecordFailure(ctx context.Context, cause error) error {
 // update.
 func (s *Store) ensure(ctx context.Context, at time.Time) error {
 	if err := s.repo.Write().EnsureTelegramState(ctx, sqlc.EnsureTelegramStateParams{
-		CreatedAt: stamp(at),
-		UpdatedAt: stamp(at),
+		CreatedAt: domain.Stamp(at),
+		UpdatedAt: domain.Stamp(at),
 	}); err != nil {
 		return fmt.Errorf("telegram: create the channel row: %w", err)
 	}
@@ -291,8 +292,6 @@ func hashCode(code string) string {
 	sum := sha256.Sum256([]byte(code))
 	return hex.EncodeToString(sum[:])
 }
-
-func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
 func optionalTime(value *string) *time.Time {
 	if value == nil || *value == "" {

@@ -1,8 +1,8 @@
 package httpapi
 
 import (
-	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -73,6 +73,9 @@ func newRepairEventResponse(e sqlc.RepairEvent) repairEventResponse {
 	}
 }
 
+// recRepair names a repair for the shared error answers.
+var recRepair = record{noun: "repair"}
+
 func (s *server) routeRepairs(mux *http.ServeMux) {
 	route(mux, "/api/v1/properties/{id}/repairs", methods{
 		http.MethodGet:  s.guarded(s.handleListRepairs),
@@ -104,7 +107,7 @@ func (s *server) handleListRepairs(w http.ResponseWriter, r *http.Request) {
 
 	var status *string
 	if raw := strings.TrimSpace(r.URL.Query().Get("status")); raw != "" {
-		if !slicesContains(repairStatuses, raw) {
+		if !slices.Contains(repairStatuses, raw) {
 			WriteProblem(w, r, http.StatusBadRequest,
 				"status has to be one of "+strings.Join(repairStatuses, ", ")+".")
 			return
@@ -113,7 +116,7 @@ func (s *server) handleListRepairs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := s.repo.Read().GetProperty(ctx, propertyID); err != nil {
-		s.propertyReadError(w, r, err)
+		s.readError(w, r, recProperty, err)
 		return
 	}
 
@@ -146,7 +149,7 @@ func (s *server) handleGetRepair(w http.ResponseWriter, r *http.Request) {
 
 	repair, err := s.repo.Read().GetRepair(ctx, id)
 	if err != nil {
-		s.repairReadError(w, r, err)
+		s.readError(w, r, recRepair, err)
 		return
 	}
 	events, err := s.repo.Read().ListRepairEvents(ctx, id)
@@ -192,7 +195,7 @@ func (s *server) handleCreateRepair(w http.ResponseWriter, r *http.Request) {
 		req.Status = "open"
 	}
 	if req.OpenedOn == "" {
-		req.OpenedOn = time.Now().UTC().Format(time.DateOnly)
+		req.OpenedOn = domain.Today()
 	}
 	req.Description = strings.TrimSpace(req.Description)
 
@@ -205,7 +208,7 @@ func (s *server) handleCreateRepair(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	if _, err := s.repo.Read().GetProperty(ctx, propertyID); err != nil {
-		s.propertyReadError(w, r, err)
+		s.readError(w, r, recProperty, err)
 		return
 	}
 
@@ -262,23 +265,21 @@ func (s *server) handleUpdateRepair(w http.ResponseWriter, r *http.Request) {
 
 		wasClosed := closedStatuses[current.Status]
 		isCapex := current.IsCapex == 1
-		for _, apply := range []func() error{
-			func() error { return p.required("opened_on", &current.OpenedOn) },
-			func() error { return p.required("status", &current.Status) },
-			func() error { return p.required("category", &current.Category) },
-			func() error { return p.required("description", &current.Description) },
-			func() error { return p.required("notes", &current.Notes) },
-			func() error { return p.required("is_capex", &isCapex) },
-			func() error { return p.nullable("unit_id", &current.UnitID) },
-			func() error { return p.nullable("closed_on", &current.ClosedOn) },
-			func() error { return p.nullable("vendor_id", &current.VendorID) },
-			func() error { return p.nullable("estimate_cents", &current.EstimateCents) },
-			func() error { return p.nullable("actual_cents", &current.ActualCents) },
-			func() error { return p.nullable("warranty_until", &current.WarrantyUntil) },
-		} {
-			if err := apply(); err != nil {
-				return validationError{err.Error()}
-			}
+		if err := p.apply(
+			required("opened_on", &current.OpenedOn),
+			required("status", &current.Status),
+			required("category", &current.Category),
+			required("description", &current.Description),
+			required("notes", &current.Notes),
+			required("is_capex", &isCapex),
+			nullable("unit_id", &current.UnitID),
+			nullable("closed_on", &current.ClosedOn),
+			nullable("vendor_id", &current.VendorID),
+			nullable("estimate_cents", &current.EstimateCents),
+			nullable("actual_cents", &current.ActualCents),
+			nullable("warranty_until", &current.WarrantyUntil),
+		); err != nil {
+			return err
 		}
 
 		// Closing and reopening carry their date with them, unless the caller
@@ -377,7 +378,7 @@ func (s *server) handleCreateRepairEvent(w http.ResponseWriter, r *http.Request)
 
 	ctx := r.Context()
 	if _, err := s.repo.Read().GetRepair(ctx, repairID); err != nil {
-		s.repairReadError(w, r, err)
+		s.readError(w, r, recRepair, err)
 		return
 	}
 
@@ -387,7 +388,7 @@ func (s *server) handleCreateRepairEvent(w http.ResponseWriter, r *http.Request)
 		CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
-		if isForeignKeyError(err) {
+		if store.ForeignKey(err) {
 			WriteProblem(w, r, http.StatusUnprocessableEntity, "No document has that id.")
 			return
 		}
@@ -420,7 +421,7 @@ func (s *server) handleDeleteRepairEvent(w http.ResponseWriter, r *http.Request)
 // reconcileClosing supplies a closing date for a repair created as finished.
 func reconcileClosing(status string, closedOn *string) *string {
 	if closedStatuses[status] && closedOn == nil {
-		today := time.Now().UTC().Format(time.DateOnly)
+		today := domain.Today()
 		return &today
 	}
 	if !closedStatuses[status] {
@@ -436,7 +437,7 @@ func reconcileClosingTransition(status string, wasClosed bool, closedOn *string)
 	isClosed := closedStatuses[status]
 	switch {
 	case isClosed && !wasClosed:
-		today := time.Now().UTC().Format(time.DateOnly)
+		today := domain.Today()
 		return &today
 	case !isClosed:
 		return nil
@@ -451,7 +452,7 @@ func validateRepair(openedOn string, closedOn *string, status string,
 	if !isCalendarDate(openedOn) {
 		return "The opening date has to be written as YYYY-MM-DD."
 	}
-	if !slicesContains(repairStatuses, status) {
+	if !slices.Contains(repairStatuses, status) {
 		return "Status has to be one of " + strings.Join(repairStatuses, ", ") + "."
 	}
 	if closedOn != nil {
@@ -474,27 +475,12 @@ func validateRepair(openedOn string, closedOn *string, status string,
 	return ""
 }
 
-func (s *server) repairReadError(w http.ResponseWriter, r *http.Request, err error) {
-	if store.NotFound(err) {
-		WriteProblem(w, r, http.StatusNotFound, "No such repair.")
+// repairWriteError adds the reference a repair can get wrong -- a property or
+// unit that is not there -- and leaves the rest to the shared answer.
+func (s *server) repairWriteError(w http.ResponseWriter, r *http.Request, err error) {
+	if store.ForeignKey(err) {
+		s.danglingReference(w, r, recRepair)
 		return
 	}
-	loggerFrom(r.Context()).Error("read repair", "error", err)
-	WriteProblem(w, r, http.StatusInternalServerError, "Could not read the repair.")
-}
-
-func (s *server) repairWriteError(w http.ResponseWriter, r *http.Request, err error) {
-	var invalid validationError
-	switch {
-	case errors.As(err, &invalid):
-		WriteProblem(w, r, http.StatusUnprocessableEntity, invalid.detail)
-	case store.NotFound(err):
-		WriteProblem(w, r, http.StatusNotFound, "No such repair.")
-	case isForeignKeyError(err):
-		WriteProblem(w, r, http.StatusUnprocessableEntity,
-			"One of the records this repair points at does not exist.")
-	default:
-		loggerFrom(r.Context()).Error("write repair", "error", err)
-		WriteProblem(w, r, http.StatusInternalServerError, "Could not save the repair.")
-	}
+	s.writeError(w, r, recRepair, err)
 }

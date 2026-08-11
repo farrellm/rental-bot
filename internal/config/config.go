@@ -326,79 +326,64 @@ func Load(path string) (Config, error) {
 }
 
 // overlayEnv applies RENTAL_BOT_* variables on top of whatever the file set.
+//
+// It reads as a table of every variable this process understands and the field
+// it writes, which is the useful thing to be able to scan. The loader collects
+// failures rather than returning at the first, so an operator who mistyped two
+// durations is told about both instead of finding the second one on the next
+// restart.
 func (c *Config) overlayEnv() error {
-	envString("SERVER_ADDR", &c.Server.Addr)
-	envString("SERVER_BASE_URL", &c.Server.BaseURL)
-	envString("DATABASE_PATH", &c.Database.Path)
-	if err := envInt("DATABASE_READ_POOL_SIZE", &c.Database.ReadPoolSize); err != nil {
-		return err
-	}
-	envString("STORAGE_BLOBS", &c.Storage.Blobs)
-	envString("STORAGE_RAW_EMAIL", &c.Storage.RawEmail)
-	envString("STORAGE_SPOOL", &c.Storage.Spool)
-	if err := envInt64("STORAGE_MAX_UPLOAD_BYTES", &c.Storage.MaxUploadBytes); err != nil {
-		return err
-	}
-	envString("GMAIL_CLIENT_ID", &c.Gmail.ClientID)
-	envString("GMAIL_TOPIC", &c.Gmail.Topic)
-	envList("GMAIL_ALLOWED_SENDERS", &c.Gmail.AllowedSenders)
-	envString("GMAIL_PROCESSED_LABEL", &c.Gmail.ProcessedLabel)
-	envString("GMAIL_IGNORED_LABEL", &c.Gmail.IgnoredLabel)
-	if err := envDuration("GMAIL_POLL_INTERVAL", &c.Gmail.PollInterval); err != nil {
-		return err
-	}
-	if err := envDuration("GMAIL_WATCH_RENEW_INTERVAL", &c.Gmail.WatchRenewInterval); err != nil {
-		return err
-	}
-	if err := envInt64("GMAIL_MAX_ATTACHMENT_BYTES", &c.Gmail.MaxAttachmentBytes); err != nil {
-		return err
-	}
-	envString("GMAIL_PUBSUB_AUDIENCE", &c.Gmail.PubSub.Audience)
-	envString("GMAIL_PUBSUB_SERVICE_ACCOUNT", &c.Gmail.PubSub.ServiceAccount)
+	var env envLoader
 
-	envString("TELEGRAM_BOT_USERNAME", &c.Telegram.BotUsername)
-	if err := envDuration("TELEGRAM_COOLDOWN", &c.Telegram.Cooldown); err != nil {
-		return err
-	}
-	if err := envDuration("TELEGRAM_CRITICAL_COOLDOWN", &c.Telegram.CriticalCooldown); err != nil {
-		return err
-	}
-	if err := envDuration("TELEGRAM_PAIRING_TTL", &c.Telegram.PairingTTL); err != nil {
-		return err
-	}
-	if err := envDuration("TELEGRAM_POLL_INTERVAL", &c.Telegram.PollInterval); err != nil {
-		return err
-	}
-	if err := envDuration("TELEGRAM_SWEEP_INTERVAL", &c.Telegram.SweepInterval); err != nil {
-		return err
-	}
-	if err := envInt("TELEGRAM_QUEUE_BACKLOG_THRESHOLD", &c.Telegram.QueueBacklogThreshold); err != nil {
-		return err
-	}
-	if err := envDuration("TELEGRAM_SILENCE_AFTER", &c.Telegram.SilenceAfter); err != nil {
-		return err
-	}
+	env.str("SERVER_ADDR", &c.Server.Addr)
+	env.str("SERVER_BASE_URL", &c.Server.BaseURL)
 
-	if err := envInt("JOBS_WORKERS", &c.Jobs.Workers); err != nil {
-		return err
-	}
-	if err := envDuration("JOBS_POLL_INTERVAL", &c.Jobs.PollInterval); err != nil {
-		return err
-	}
-	if err := envDuration("JOBS_LEASE_TIMEOUT", &c.Jobs.LeaseTimeout); err != nil {
-		return err
-	}
+	env.str("DATABASE_PATH", &c.Database.Path)
+	env.integer("DATABASE_READ_POOL_SIZE", &c.Database.ReadPoolSize)
 
-	envString("LOG_LEVEL", &c.Log.Level)
-	envString("LOG_FORMAT", &c.Log.Format)
+	env.str("STORAGE_BLOBS", &c.Storage.Blobs)
+	env.str("STORAGE_RAW_EMAIL", &c.Storage.RawEmail)
+	env.str("STORAGE_SPOOL", &c.Storage.Spool)
+	env.bytes("STORAGE_MAX_UPLOAD_BYTES", &c.Storage.MaxUploadBytes)
 
+	env.str("GMAIL_CLIENT_ID", &c.Gmail.ClientID)
+	env.str("GMAIL_TOPIC", &c.Gmail.Topic)
+	env.list("GMAIL_ALLOWED_SENDERS", &c.Gmail.AllowedSenders)
+	env.str("GMAIL_PROCESSED_LABEL", &c.Gmail.ProcessedLabel)
+	env.str("GMAIL_IGNORED_LABEL", &c.Gmail.IgnoredLabel)
+	env.duration("GMAIL_POLL_INTERVAL", &c.Gmail.PollInterval)
+	env.duration("GMAIL_WATCH_RENEW_INTERVAL", &c.Gmail.WatchRenewInterval)
+	env.bytes("GMAIL_MAX_ATTACHMENT_BYTES", &c.Gmail.MaxAttachmentBytes)
+	env.str("GMAIL_PUBSUB_AUDIENCE", &c.Gmail.PubSub.Audience)
+	env.str("GMAIL_PUBSUB_SERVICE_ACCOUNT", &c.Gmail.PubSub.ServiceAccount)
+
+	env.str("TELEGRAM_BOT_USERNAME", &c.Telegram.BotUsername)
+	env.duration("TELEGRAM_COOLDOWN", &c.Telegram.Cooldown)
+	env.duration("TELEGRAM_CRITICAL_COOLDOWN", &c.Telegram.CriticalCooldown)
+	env.duration("TELEGRAM_PAIRING_TTL", &c.Telegram.PairingTTL)
+	env.duration("TELEGRAM_POLL_INTERVAL", &c.Telegram.PollInterval)
+	env.duration("TELEGRAM_SWEEP_INTERVAL", &c.Telegram.SweepInterval)
+	env.integer("TELEGRAM_QUEUE_BACKLOG_THRESHOLD", &c.Telegram.QueueBacklogThreshold)
+	env.duration("TELEGRAM_SILENCE_AFTER", &c.Telegram.SilenceAfter)
+
+	env.integer("JOBS_WORKERS", &c.Jobs.Workers)
+	env.duration("JOBS_POLL_INTERVAL", &c.Jobs.PollInterval)
+	env.duration("JOBS_LEASE_TIMEOUT", &c.Jobs.LeaseTimeout)
+
+	env.str("LOG_LEVEL", &c.Log.Level)
+	env.str("LOG_FORMAT", &c.Log.Format)
+
+	if err := env.err(); err != nil {
+		return err
+	}
 	return c.loadSecrets()
 }
 
 // loadSecrets reads the encryption key from the environment or a key file.
 func (c *Config) loadSecrets() error {
-	envString("GMAIL_CLIENT_SECRET", &c.Secrets.GmailClientSecret)
-	envString("TELEGRAM_BOT_TOKEN", &c.Secrets.TelegramBotToken)
+	var env envLoader
+	env.str("GMAIL_CLIENT_SECRET", &c.Secrets.GmailClientSecret)
+	env.str("TELEGRAM_BOT_TOKEN", &c.Secrets.TelegramBotToken)
 
 	if v, ok := os.LookupEnv(envPrefix + "SECRET_KEY"); ok && v != "" {
 		c.Secrets.Key = []byte(v)
@@ -606,29 +591,26 @@ func (l Log) Logger(w io.Writer) *slog.Logger {
 	return slog.New(h)
 }
 
-func envString(suffix string, dst *string) {
+// envLoader reads RENTAL_BOT_* variables into fields, collecting what it could
+// not read rather than stopping at the first.
+//
+// A variable that is not set leaves its field alone, so the layering is file,
+// then environment, and an unset variable is not the same as an empty one.
+type envLoader struct{ errs []error }
+
+// err reports everything that failed, or nil.
+func (e *envLoader) err() error { return errors.Join(e.errs...) }
+
+func (e *envLoader) str(suffix string, dst *string) {
 	if v, ok := os.LookupEnv(envPrefix + suffix); ok {
 		*dst = v
 	}
 }
 
-func envInt(suffix string, dst *int) error {
-	v, ok := os.LookupEnv(envPrefix + suffix)
-	if !ok {
-		return nil
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return fmt.Errorf("%s%s is %q; it must be an integer", envPrefix, suffix, v)
-	}
-	*dst = n
-	return nil
-}
-
-// envList reads a comma-separated variable, trimming and dropping blanks, so
+// list reads a comma-separated variable, trimming and dropping blanks, so
 // RENTAL_BOT_GMAIL_ALLOWED_SENDERS="a@x.com, b@x.com" works the way anyone
 // would expect it to.
-func envList(suffix string, dst *[]string) {
+func (e *envLoader) list(suffix string, dst *[]string) {
 	v, ok := os.LookupEnv(envPrefix + suffix)
 	if !ok {
 		return
@@ -642,26 +624,40 @@ func envList(suffix string, dst *[]string) {
 	*dst = out
 }
 
-func envDuration(suffix string, dst *Duration) error {
+func (e *envLoader) integer(suffix string, dst *int) {
 	v, ok := os.LookupEnv(envPrefix + suffix)
 	if !ok {
-		return nil
+		return
 	}
-	if err := dst.UnmarshalText([]byte(v)); err != nil {
-		return fmt.Errorf("%s%s: %w", envPrefix, suffix, err)
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		e.errs = append(e.errs, fmt.Errorf("%s%s is %q; it must be an integer", envPrefix, suffix, v))
+		return
 	}
-	return nil
+	*dst = n
 }
 
-func envInt64(suffix string, dst *int64) error {
+// bytes reads a size in bytes. It is separate from integer only because the
+// fields it writes are int64.
+func (e *envLoader) bytes(suffix string, dst *int64) {
 	v, ok := os.LookupEnv(envPrefix + suffix)
 	if !ok {
-		return nil
+		return
 	}
 	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {
-		return fmt.Errorf("%s%s is %q; it must be an integer", envPrefix, suffix, v)
+		e.errs = append(e.errs, fmt.Errorf("%s%s is %q; it must be an integer", envPrefix, suffix, v))
+		return
 	}
 	*dst = n
-	return nil
+}
+
+func (e *envLoader) duration(suffix string, dst *Duration) {
+	v, ok := os.LookupEnv(envPrefix + suffix)
+	if !ok {
+		return
+	}
+	if err := dst.UnmarshalText([]byte(v)); err != nil {
+		e.errs = append(e.errs, fmt.Errorf("%s%s: %w", envPrefix, suffix, err))
+	}
 }

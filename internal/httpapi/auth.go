@@ -111,7 +111,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// parameters costs nothing extra. This is the only moment it is possible.
 	if auth.NeedsRehash(user.PasswordHash) {
 		if rehashed, err := auth.HashPassword(req.Password); err == nil {
-			now := time.Now().UTC().Format(time.RFC3339)
+			now := timestamp()
 			if _, err := s.repo.Write().UpsertUser(ctx, sqlc.UpsertUserParams{
 				Username: user.Username, Email: user.Email, PasswordHash: rehashed,
 				CreatedAt: now, UpdatedAt: now,

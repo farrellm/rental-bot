@@ -79,7 +79,14 @@ func NotFound(err error) bool {
 // is the caller's mistake, not the server's.
 //
 // modernc.org/sqlite reports constraint failures as a message rather than a
-// typed error, so this matches on the text SQLite itself produces.
+// typed error, so this and ForeignKey match on the text SQLite itself produces.
 func Conflict(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
+
+// ForeignKey reports whether err is a reference to a row that is not there,
+// which a handler answers with 422: naming a unit that does not exist is a bad
+// request, not a broken server.
+func ForeignKey(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "FOREIGN KEY constraint failed")
 }

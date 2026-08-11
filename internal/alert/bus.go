@@ -3,9 +3,11 @@ package alert
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
@@ -93,8 +95,8 @@ func (b *Bus) Publish(ctx context.Context, a Alert) {
 		b.log.Error("an alert was published with an unknown severity", "key", a.Key, "severity", a.Severity)
 		a.Severity = Warning
 	}
-	a.Title = truncate(a.Title, titleLimit)
-	a.Detail = truncate(a.Detail, detailLimit)
+	a.Title = domain.Truncate(a.Title, titleLimit)
+	a.Detail = domain.Truncate(a.Detail, detailLimit)
 
 	for _, sink := range b.snapshot() {
 		b.publishTo(ctx, sink, a)
@@ -114,8 +116,8 @@ func (b *Bus) Resolve(ctx context.Context, key, title string) {
 
 	for _, sink := range b.snapshot() {
 		closed, err := b.repo.Write().ResolveNotification(ctx, sqlc.ResolveNotificationParams{
-			ResolvedAt: stamp(at),
-			UpdatedAt:  stamp(at),
+			ResolvedAt: domain.Stamp(at),
+			UpdatedAt:  domain.Stamp(at),
 			DedupeKey:  key,
 			Channel:    sink.Name(),
 		})
@@ -128,7 +130,7 @@ func (b *Bus) Resolve(ctx context.Context, key, title string) {
 		}
 
 		b.deliver(ctx, sink, Notice{
-			Alert:       Alert{Key: key, Severity: Info, Title: truncate(title, titleLimit)},
+			Alert:       Alert{Key: key, Severity: Info, Title: domain.Truncate(title, titleLimit)},
 			FirstSeenAt: at,
 			Recovered:   true,
 		})
@@ -159,7 +161,7 @@ func (b *Bus) publishTo(ctx context.Context, sink Sink, a Alert) {
 	}
 
 	if last := open.LastSentAt; last != nil {
-		if at.Sub(parseStamp(*last)) < b.cooldownFor(a.Severity) {
+		if at.Sub(domain.ParseStamp(*last)) < b.cooldownFor(a.Severity) {
 			// Still quiet. This is the branch that does the work of §8.3.
 			b.log.Debug("alert suppressed by its cooldown",
 				"key", a.Key, "channel", channel, "send_count", open.SendCount)
@@ -168,11 +170,11 @@ func (b *Bus) publishTo(ctx context.Context, sink Sink, a Alert) {
 	}
 
 	if err := b.repo.Write().RecordNotificationSent(ctx, sqlc.RecordNotificationSentParams{
-		LastSentAt: stamp(at),
+		LastSentAt: domain.Stamp(at),
 		Severity:   string(a.Severity),
 		Title:      a.Title,
 		Detail:     a.Detail,
-		UpdatedAt:  stamp(at),
+		UpdatedAt:  domain.Stamp(at),
 		ID:         open.ID,
 	}); err != nil {
 		b.log.Error("record a restated notification", "error", err, "key", a.Key, "channel", channel)
@@ -180,7 +182,7 @@ func (b *Bus) publishTo(ctx context.Context, sink Sink, a Alert) {
 
 	b.deliver(ctx, sink, Notice{
 		Alert:       a,
-		FirstSeenAt: parseStamp(open.FirstSeenAt),
+		FirstSeenAt: domain.ParseStamp(open.FirstSeenAt),
 		SendCount:   open.SendCount,
 	})
 }
@@ -195,9 +197,9 @@ func (b *Bus) stateFresh(ctx context.Context, sink Sink, a Alert, at time.Time) 
 		Severity:    string(a.Severity),
 		Title:       a.Title,
 		Detail:      a.Detail,
-		FirstSeenAt: stamp(at),
-		CreatedAt:   stamp(at),
-		UpdatedAt:   stamp(at),
+		FirstSeenAt: domain.Stamp(at),
+		CreatedAt:   domain.Stamp(at),
+		UpdatedAt:   domain.Stamp(at),
 	})
 	if err != nil {
 		if store.Conflict(err) {
@@ -215,11 +217,11 @@ func (b *Bus) stateFresh(ctx context.Context, sink Sink, a Alert, at time.Time) 
 	}
 
 	if err := b.repo.Write().RecordNotificationSent(ctx, sqlc.RecordNotificationSentParams{
-		LastSentAt: stamp(at),
+		LastSentAt: domain.Stamp(at),
 		Severity:   string(a.Severity),
 		Title:      a.Title,
 		Detail:     a.Detail,
-		UpdatedAt:  stamp(at),
+		UpdatedAt:  domain.Stamp(at),
 		ID:         row.ID,
 	}); err != nil {
 		b.log.Error("record the first send of a notification", "error", err, "key", a.Key)
@@ -248,5 +250,5 @@ func (b *Bus) cooldownFor(s Severity) time.Duration {
 func (b *Bus) snapshot() []Sink {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	return append([]Sink(nil), b.sinks...)
+	return slices.Clone(b.sinks)
 }

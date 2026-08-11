@@ -19,6 +19,7 @@ import (
 	"math/rand/v2"
 	"time"
 
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
@@ -108,12 +109,12 @@ func (q *Queue) Enqueue(ctx context.Context, kind string, payload any, opts Opti
 		dedupe = &opts.DedupeKey
 	}
 
-	stampNow := stamp(q.now())
+	stampNow := domain.Stamp(q.now())
 	job, err := q.repo.Write().EnqueueJob(ctx, sqlc.EnqueueJobParams{
 		Kind:        kind,
 		Payload:     body,
 		DedupeKey:   dedupe,
-		RunAfter:    stamp(runAfter),
+		RunAfter:    domain.Stamp(runAfter),
 		MaxAttempts: maxAttempts,
 		CreatedAt:   stampNow,
 		UpdatedAt:   stampNow,
@@ -146,7 +147,7 @@ func (q *Queue) EnqueueOnce(ctx context.Context, kind, dedupeKey string, payload
 // claim takes the oldest runnable job, or reports none.
 func (q *Queue) claim(ctx context.Context, worker string) (Job, bool, error) {
 	row, err := q.repo.Write().ClaimJob(ctx, sqlc.ClaimJobParams{
-		Now:    stamp(q.now()),
+		Now:    domain.Stamp(q.now()),
 		Worker: worker,
 	})
 	if store.NotFound(err) {
@@ -163,7 +164,7 @@ func (q *Queue) claim(ctx context.Context, worker string) (Job, bool, error) {
 
 // complete marks a job done.
 func (q *Queue) complete(ctx context.Context, id int64) error {
-	err := q.repo.Write().CompleteJob(ctx, sqlc.CompleteJobParams{UpdatedAt: stamp(q.now()), ID: id})
+	err := q.repo.Write().CompleteJob(ctx, sqlc.CompleteJobParams{UpdatedAt: domain.Stamp(q.now()), ID: id})
 	if err != nil {
 		return fmt.Errorf("jobs: complete %d: %w", id, err)
 	}
@@ -179,7 +180,7 @@ func (q *Queue) fail(ctx context.Context, job Job, cause error) (retrying bool, 
 	if len(detail) > 500 {
 		detail = detail[:500] + "..."
 	}
-	stampNow := stamp(q.now())
+	stampNow := domain.Stamp(q.now())
 
 	if job.Attempts >= job.MaxAttempts {
 		if err := q.repo.Write().FailJob(ctx, sqlc.FailJobParams{
@@ -191,7 +192,7 @@ func (q *Queue) fail(ctx context.Context, job Job, cause error) (retrying bool, 
 	}
 
 	if err := q.repo.Write().RetryJob(ctx, sqlc.RetryJobParams{
-		RunAfter:  stamp(q.now().Add(backoff(job.Attempts))),
+		RunAfter:  domain.Stamp(q.now().Add(backoff(job.Attempts))),
 		LastError: detail,
 		UpdatedAt: stampNow,
 		ID:        job.ID,
@@ -204,8 +205,8 @@ func (q *Queue) fail(ctx context.Context, job Job, cause error) (retrying bool, 
 // reclaim returns jobs whose worker stopped reporting to the pending pool.
 func (q *Queue) reclaim(ctx context.Context, lease time.Duration) (int64, error) {
 	n, err := q.repo.Write().ReclaimStaleJobs(ctx, sqlc.ReclaimStaleJobsParams{
-		UpdatedAt: stamp(q.now()),
-		OlderThan: stamp(q.now().Add(-lease)),
+		UpdatedAt: domain.Stamp(q.now()),
+		OlderThan: domain.Stamp(q.now().Add(-lease)),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("jobs: reclaim: %w", err)
@@ -243,12 +244,3 @@ func backoff(attempts int64) time.Duration {
 	))
 	return wait/2 + time.Duration(rand.Int64N(int64(wait/2)+1))
 }
-
-// stamp renders a timestamp the way every other column in this schema holds
-// one: RFC3339, UTC.
-//
-// run_after and locked_at are compared with < and <= in SQL rather than parsed
-// first, which works only because RFC3339 at a fixed UTC offset sorts
-// lexicographically the way it sorts chronologically. Changing this format is
-// not a formatting change; it is a change to how the queue picks its next job.
-func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339) }

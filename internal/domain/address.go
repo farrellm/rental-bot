@@ -100,6 +100,11 @@ func suffixIndex(tokens []string) int {
 
 // dropUnits removes each unit designator and the token that identifies the
 // unit, so that the fold describes a building rather than a door.
+//
+// The filter is in place, so this overwrites its argument. Every caller passes
+// a slice tokenize has just built and nobody else holds, which is what makes
+// that safe; the index loop is deliberate too, because a designator consumes
+// the token after it.
 func dropUnits(tokens []string) []string {
 	out := tokens[:0]
 	for i := 0; i < len(tokens); i++ {

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/gmail"
 )
 
@@ -122,7 +123,7 @@ func (s *server) channelChecks(ctx context.Context) []Check {
 	case state.Muted(time.Now().UTC()):
 		return []Check{{
 			Name: "telegram", OK: true,
-			Detail: "Paired, muted until " + state.MutedUntil.Format(time.RFC3339) + ".",
+			Detail: "Paired, muted until " + domain.Stamp(*state.MutedUntil) + ".",
 		}}
 	default:
 		return []Check{{Name: "telegram", OK: true, Detail: "Paired."}}
@@ -191,7 +192,7 @@ func (s *server) ingestionChecks(ctx context.Context) []Check {
 	} else {
 		checks = append(checks, Check{
 			Name: "gmail_watch", OK: true,
-			Detail: "renews before " + account.WatchExpiresAt.Format(time.RFC3339),
+			Detail: "renews before " + domain.Stamp(*account.WatchExpiresAt),
 		})
 	}
 

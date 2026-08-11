@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -46,7 +46,7 @@ func decodePatch(w http.ResponseWriter, r *http.Request, known ...string) (patch
 		}
 	}
 	if len(unknown) > 0 {
-		sort.Strings(unknown)
+		slices.Sort(unknown)
 		WriteProblem(w, r, http.StatusBadRequest,
 			"The request body has fields this endpoint does not accept: "+
 				strings.Join(unknown, ", ")+".")
@@ -58,6 +58,48 @@ func decodePatch(w http.ResponseWriter, r *http.Request, known ...string) (patch
 		return nil, false
 	}
 	return p, true
+}
+
+// binding pairs a field name with the column the merge writes it into.
+//
+// A PATCH applier is a list of these and nothing else, which is what makes it
+// readable as the table it is: the wire name on the left, the column on the
+// right. Building the list with required and nullable keeps the three-state
+// distinction at the point where the field is named, rather than in a
+// convention the reader has to hold in their head.
+type binding struct {
+	name string
+	dst  any
+	// null reports whether the field can be cleared. A required field's null is
+	// a client error; a nullable one's is the instruction to clear the column.
+	null bool
+}
+
+// required binds a field that has no null state. dst is a *T.
+func required(name string, dst any) binding { return binding{name: name, dst: dst} }
+
+// nullable binds a field that can be cleared. dst is a **T, so unmarshalling
+// null sets the pointer to nil and the column follows.
+func nullable(name string, dst any) binding { return binding{name: name, dst: dst, null: true} }
+
+// apply merges every bound field the client sent, in order, and reports the
+// first one it could not.
+//
+// The failure comes back as a validationError so a caller inside a write
+// transaction can return it and have the handler answer 422.
+func (p patch) apply(bindings ...binding) error {
+	for _, b := range bindings {
+		var err error
+		if b.null {
+			err = p.nullable(b.name, b.dst)
+		} else {
+			err = p.required(b.name, b.dst)
+		}
+		if err != nil {
+			return validationError{err.Error()}
+		}
+	}
+	return nil
 }
 
 // required applies a field that has no null state. dst is a *T.

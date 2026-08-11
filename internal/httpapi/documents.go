@@ -7,12 +7,13 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/farrellm/rental-bot/internal/auth"
 	"github.com/farrellm/rental-bot/internal/blob"
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
@@ -90,6 +91,9 @@ func newDocumentResponse(d sqlc.Document) documentResponse {
 		CreatedAt: d.CreatedAt, UpdatedAt: d.UpdatedAt,
 	}
 }
+
+// recDocument names a document for the shared error answers.
+var recDocument = record{noun: "document"}
 
 func (s *server) routeDocuments(mux *http.ServeMux) {
 	route(mux, "/api/v1/documents", methods{
@@ -189,7 +193,7 @@ func (s *server) handleUploadDocument(w http.ResponseWriter, r *http.Request) {
 	if kind == "" {
 		kind = "other"
 	}
-	if !slicesContains(documentKinds, kind) {
+	if !slices.Contains(documentKinds, kind) {
 		WriteProblem(w, r, http.StatusUnprocessableEntity,
 			"Kind has to be one of "+strings.Join(documentKinds, ", ")+".")
 		return
@@ -201,7 +205,7 @@ func (s *server) handleUploadDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	if propertyID != nil {
 		if _, err := s.repo.Read().GetProperty(ctx, *propertyID); err != nil {
-			s.propertyReadError(w, r, err)
+			s.readError(w, r, recProperty, err)
 			return
 		}
 	}
@@ -312,7 +316,7 @@ func (s *server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if _, err := s.repo.Read().GetProperty(ctx, propertyID); err != nil {
-		s.propertyReadError(w, r, err)
+		s.readError(w, r, recProperty, err)
 		return
 	}
 
@@ -365,7 +369,7 @@ func (s *server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 
 	doc, err := s.repo.Read().GetDocument(ctx, id)
 	if err != nil {
-		s.documentReadError(w, r, err)
+		s.readError(w, r, recDocument, err)
 		return
 	}
 	links, err := s.repo.Read().ListDocumentLinks(ctx, id)
@@ -401,7 +405,7 @@ func (s *server) handleDocumentContent(w http.ResponseWriter, r *http.Request) {
 
 	doc, err := s.repo.Read().GetDocument(ctx, id)
 	if err != nil {
-		s.documentReadError(w, r, err)
+		s.readError(w, r, recDocument, err)
 		return
 	}
 
@@ -433,18 +437,7 @@ func (s *server) handleDocumentContent(w http.ResponseWriter, r *http.Request) {
 
 	// ServeContent seeks to size the body and answers range requests, which is
 	// how a browser scrubs a PDF without downloading all of it.
-	http.ServeContent(w, r, doc.OriginalFilename, modifiedAt(doc.UpdatedAt), f)
-}
-
-// modifiedAt reads a stored RFC3339 timestamp for ServeContent, which uses it
-// for Last-Modified and conditional requests. An unparseable one is the zero
-// time, which ServeContent reads as "do not claim to know".
-func modifiedAt(value string) time.Time {
-	at, err := time.Parse(time.RFC3339, value)
-	if err != nil {
-		return time.Time{}
-	}
-	return at
+	http.ServeContent(w, r, doc.OriginalFilename, domain.ParseStamp(doc.UpdatedAt), f)
 }
 
 // disposition decides whether a document may render in the browser.
@@ -480,21 +473,17 @@ func (s *server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
-		if err := p.nullable("property_id", &current.PropertyID); err != nil {
-			return validationError{err.Error()}
-		}
-		for _, apply := range []func() error{
-			func() error { return p.required("kind", &current.Kind) },
-			func() error { return p.required("title", &current.Title) },
-			func() error { return p.required("original_filename", &current.OriginalFilename) },
-		} {
-			if err := apply(); err != nil {
-				return validationError{err.Error()}
-			}
+		if err := p.apply(
+			nullable("property_id", &current.PropertyID),
+			required("kind", &current.Kind),
+			required("title", &current.Title),
+			required("original_filename", &current.OriginalFilename),
+		); err != nil {
+			return err
 		}
 
 		current.Title = strings.TrimSpace(current.Title)
-		if !slicesContains(documentKinds, current.Kind) {
+		if !slices.Contains(documentKinds, current.Kind) {
 			return validationError{"Kind has to be one of " + strings.Join(documentKinds, ", ") + "."}
 		}
 		if len(current.Title) > 200 {
@@ -521,7 +510,7 @@ func (s *server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if err != nil {
-		s.documentWriteError(w, r, err)
+		s.writeError(w, r, recDocument, err)
 		return
 	}
 	writeJSON(w, r, http.StatusOK, newDocumentResponse(updated))
@@ -566,7 +555,7 @@ func (s *server) handleLinkDocument(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	if !slicesContains(linkEntityTypes, req.EntityType) {
+	if !slices.Contains(linkEntityTypes, req.EntityType) {
 		WriteProblem(w, r, http.StatusUnprocessableEntity,
 			"entity_type has to be one of "+strings.Join(linkEntityTypes, ", ")+".")
 		return
@@ -578,7 +567,7 @@ func (s *server) handleLinkDocument(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if _, err := s.repo.Read().GetDocument(ctx, id); err != nil {
-		s.documentReadError(w, r, err)
+		s.readError(w, r, recDocument, err)
 		return
 	}
 
@@ -633,7 +622,7 @@ func parseLinkFields(w http.ResponseWriter, r *http.Request, fields map[string]s
 			"Filing a document against a record needs both entity_type and entity_id.")
 		return nil, false
 	}
-	if !slicesContains(linkEntityTypes, entityType) {
+	if !slices.Contains(linkEntityTypes, entityType) {
 		WriteProblem(w, r, http.StatusUnprocessableEntity,
 			"entity_type has to be one of "+strings.Join(linkEntityTypes, ", ")+".")
 		return nil, false
@@ -644,20 +633,6 @@ func parseLinkFields(w http.ResponseWriter, r *http.Request, fields map[string]s
 		return nil, false
 	}
 	return &linkRequest{EntityType: entityType, EntityID: id}, true
-}
-
-// optionalID reads a numeric form field that may be absent.
-func optionalID(w http.ResponseWriter, r *http.Request, raw, name string) (*int64, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, true
-	}
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id < 1 {
-		WriteProblem(w, r, http.StatusUnprocessableEntity, name+" has to name a record.")
-		return nil, false
-	}
-	return &id, true
 }
 
 // contentType settles on a type for stored content.
@@ -694,26 +669,4 @@ func userID(r *http.Request) *int64 {
 		return nil
 	}
 	return &user.ID
-}
-
-func (s *server) documentReadError(w http.ResponseWriter, r *http.Request, err error) {
-	if store.NotFound(err) {
-		WriteProblem(w, r, http.StatusNotFound, "No such document.")
-		return
-	}
-	loggerFrom(r.Context()).Error("read document", "error", err)
-	WriteProblem(w, r, http.StatusInternalServerError, "Could not read the document.")
-}
-
-func (s *server) documentWriteError(w http.ResponseWriter, r *http.Request, err error) {
-	var invalid validationError
-	switch {
-	case errors.As(err, &invalid):
-		WriteProblem(w, r, http.StatusUnprocessableEntity, invalid.detail)
-	case store.NotFound(err):
-		WriteProblem(w, r, http.StatusNotFound, "No such document.")
-	default:
-		loggerFrom(r.Context()).Error("write document", "error", err)
-		WriteProblem(w, r, http.StatusInternalServerError, "Could not save the document.")
-	}
 }

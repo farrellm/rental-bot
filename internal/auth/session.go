@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 )
@@ -70,12 +71,12 @@ func (s *Sessions) Issue(ctx context.Context, userID int64, userAgent, ip string
 	if _, err := s.repo.Write().CreateSession(ctx, sqlc.CreateSessionParams{
 		UserID:     userID,
 		TokenHash:  HashToken(token),
-		ExpiresAt:  stamp(expires),
+		ExpiresAt:  domain.Stamp(expires),
 		UserAgent:  userAgent,
 		Ip:         ip,
-		LastSeenAt: stamp(now),
-		CreatedAt:  stamp(now),
-		UpdatedAt:  stamp(now),
+		LastSeenAt: domain.Stamp(now),
+		CreatedAt:  domain.Stamp(now),
+		UpdatedAt:  domain.Stamp(now),
 	}); err != nil {
 		return "", time.Time{}, fmt.Errorf("auth: create session: %w", err)
 	}
@@ -111,9 +112,9 @@ func (s *Sessions) Lookup(ctx context.Context, token string) (sqlc.Session, sqlc
 	if seen, err := time.Parse(time.RFC3339, row.Session.LastSeenAt); err == nil {
 		if now.Sub(seen) >= slideAfter {
 			if err := s.repo.Write().TouchSession(ctx, sqlc.TouchSessionParams{
-				LastSeenAt: stamp(now),
-				ExpiresAt:  stamp(now.Add(s.ttl)),
-				UpdatedAt:  stamp(now),
+				LastSeenAt: domain.Stamp(now),
+				ExpiresAt:  domain.Stamp(now.Add(s.ttl)),
+				UpdatedAt:  domain.Stamp(now),
 				ID:         row.Session.ID,
 			}); err != nil {
 				return sqlc.Session{}, sqlc.User{}, fmt.Errorf("auth: touch session: %w", err)
@@ -147,7 +148,7 @@ func (s *Sessions) RevokeAll(ctx context.Context, userID int64) error {
 
 // Sweep removes sessions that have expired and returns how many went.
 func (s *Sessions) Sweep(ctx context.Context) (int64, error) {
-	n, err := s.repo.Write().DeleteExpiredSessions(ctx, stamp(s.now().UTC()))
+	n, err := s.repo.Write().DeleteExpiredSessions(ctx, domain.Stamp(s.now().UTC()))
 	if err != nil {
 		return 0, fmt.Errorf("auth: sweep sessions: %w", err)
 	}
@@ -160,7 +161,3 @@ func HashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }
-
-// stamp formats a timestamp as RFC3339 UTC, which is how this schema spells
-// every timestamp (docs/DESIGN.md §3).
-func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339) }
