@@ -11,7 +11,15 @@ import {
 } from "../../api/queries";
 import type { Repair, RepairStatus } from "../../api/types";
 import { Stamp, type StampState } from "../../components/Stamp";
-import { calendarDate, money, parseMoney, timestamp } from "../../format";
+import {
+  calendarDate,
+  DASH,
+  isCalendarDate,
+  money,
+  parseMoney,
+  timestamp,
+  today,
+} from "../../format";
 
 const STATUSES: RepairStatus[] = ["open", "scheduled", "in_progress", "done", "wontfix"];
 
@@ -180,7 +188,7 @@ function Docket({ repair, propertyId, open, onToggle, onError }: DocketProps) {
           <dl className="docket__facts">
             <Fact label="Opened">{calendarDate(repair.opened_on)}</Fact>
             <Fact label="Closed">{calendarDate(repair.closed_on)}</Fact>
-            <Fact label="Trade">{repair.category || "—"}</Fact>
+            <Fact label="Trade">{repair.category || DASH}</Fact>
             <Fact label="Estimate">{money(repair.estimate_cents)}</Fact>
             <Fact label="Actual">{money(repair.actual_cents)}</Fact>
             <Fact label="Capital">{repair.is_capex ? "Yes" : "No"}</Fact>
@@ -281,7 +289,7 @@ function RepairForm({ onCancel, onSubmit }: RepairFormProps) {
       setProblem("Say what is wrong.");
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(openedOn.trim())) {
+    if (!isCalendarDate(openedOn)) {
       setProblem("Write the date as YYYY-MM-DD.");
       return;
     }
@@ -378,8 +386,4 @@ function RepairForm({ onCancel, onSubmit }: RepairFormProps) {
       </div>
     </div>
   );
-}
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
 }

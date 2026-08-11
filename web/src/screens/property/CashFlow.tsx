@@ -9,7 +9,7 @@ import {
   type LedgerFilter,
 } from "../../api/queries";
 import type { TransactionCategory } from "../../api/types";
-import { calendarDate, money, parseMoney } from "../../format";
+import { calendarDate, DASH, isCalendarDate, money, parseMoney, today } from "../../format";
 
 /** The categories, in the order the ledger's own CHECK lists them. */
 const CATEGORIES: TransactionCategory[] = [
@@ -152,7 +152,7 @@ export function CashFlow() {
                       {calendarDate(entry.occurred_on)}
                     </span>
                     <span className="ledger-sheet__entry">
-                      {entry.description || entry.counterparty || "—"}
+                      {entry.description || entry.counterparty || DASH}
                       {entry.needs_review && (
                         <span className="ledger-sheet__flag stamped"> needs review</span>
                       )}
@@ -257,7 +257,7 @@ function EntryForm({ onCancel, onSubmit }: EntryFormProps) {
   async function submit() {
     if (saving) return;
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(occurredOn.trim())) {
+    if (!isCalendarDate(occurredOn)) {
       setProblem("Write the date as YYYY-MM-DD.");
       return;
     }
@@ -366,10 +366,6 @@ function EntryForm({ onCancel, onSubmit }: EntryFormProps) {
       </div>
     </div>
   );
-}
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 /**

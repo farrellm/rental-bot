@@ -4,7 +4,7 @@ import { useParams } from "react-router";
 import { describeError } from "../../api/client";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../../api/queries";
 import type { Document, DocumentKind } from "../../api/types";
-import { timestamp } from "../../format";
+import { bytes, timestamp } from "../../format";
 
 const KINDS: DocumentKind[] = [
   "lease",
@@ -113,7 +113,7 @@ function Jacket({ doc, onRemove }: { doc: Document; onRemove: () => void }) {
           <span className="jacket__sep" aria-hidden="true">
             ·
           </span>
-          {fileSize(doc.size_bytes)}
+          {bytes(doc.size_bytes)}
         </p>
         <p className="jacket__accession mono">
           <span className="stamped">Acc.</span> {doc.sha256.slice(0, 8)}
@@ -219,11 +219,4 @@ function Attach({
       )}
     </div>
   );
-}
-
-/** A size a person reads, from a count of bytes. */
-function fileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

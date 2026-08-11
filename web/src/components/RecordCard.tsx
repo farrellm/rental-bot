@@ -1,5 +1,5 @@
 import type { Status } from "../api/types";
-import { clock, commit, orDash, uptime } from "../format";
+import { clock, commit, DASH, orDash, uptime } from "../format";
 import { FieldRow } from "./FieldRow";
 import { MigrationLog } from "./MigrationLog";
 import { Stamp, type StampState } from "./Stamp";
@@ -10,8 +10,6 @@ interface Props {
   error: string | null;
   loading: boolean;
 }
-
-const DASH = "—";
 
 /** The record of service: what this process is and whether it is working. */
 export function RecordCard({ status, error, loading }: Props) {

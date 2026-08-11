@@ -14,7 +14,7 @@ import {
 } from "../../api/queries";
 import type { Lease, LeaseStatus } from "../../api/types";
 import { Stamp, type StampState } from "../../components/Stamp";
-import { calendarDate, money, parseMoney } from "../../format";
+import { calendarDate, DASH, isCalendarDate, money, parseMoney, today } from "../../format";
 import { TermRule } from "./TermRule";
 
 const STATUSES: LeaseStatus[] = ["pending", "active", "ended", "terminated"];
@@ -154,7 +154,7 @@ function Abstract({ lease, propertyId, onError }: AbstractProps) {
               {calendarDate(lease.start_date)} to {lease.end_date ?? "month to month"}
             </Fact>
             <Fact label="Deposit">{money(lease.deposit_cents)}</Fact>
-            <Fact label="Rent due">{lease.due_day ? `Day ${lease.due_day}` : "—"}</Fact>
+            <Fact label="Rent due">{lease.due_day ? `Day ${lease.due_day}` : DASH}</Fact>
             <Fact label="Late fee">{money(lease.late_fee_cents)}</Fact>
             <Fact label="Tenants">
               {detail.isPending
@@ -299,11 +299,11 @@ function LeaseForm({ units, onCancel, onSubmit }: LeaseFormProps) {
   async function submit() {
     if (saving) return;
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate.trim())) {
+    if (!isCalendarDate(startDate)) {
       setProblem("Write the start date as YYYY-MM-DD.");
       return;
     }
-    if (endDate.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(endDate.trim())) {
+    if (endDate.trim() && !isCalendarDate(endDate)) {
       setProblem("Write the end date as YYYY-MM-DD, or leave it empty for month to month.");
       return;
     }
@@ -454,8 +454,4 @@ function LeaseForm({ units, onCancel, onSubmit }: LeaseFormProps) {
       </div>
     </div>
   );
-}
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
 }

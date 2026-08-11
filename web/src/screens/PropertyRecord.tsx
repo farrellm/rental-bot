@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useParams } from "react-router";
 
 import { describeError } from "../api/client";
 import { useProperty } from "../api/queries";
-import { fileNumber } from "../format";
+import { fileNumber, oneLineAddress } from "../format";
 import { Overview } from "./property/Overview";
 
 /**
@@ -131,18 +131,4 @@ export function PropertyRecord({ isNew = false }: { isNew?: boolean }) {
 
 function tabClass({ isActive }: { isActive: boolean }): string {
   return isActive ? "tab stock" : "tab";
-}
-
-interface Addressable {
-  address_line1: string;
-  city: string;
-  state: string;
-  postal_code: string;
-}
-
-/** The address on one line, skipping the parts that were never filled in. */
-function oneLineAddress(record: Addressable | undefined): string {
-  if (!record) return "—";
-  const region = [record.city, record.state, record.postal_code].filter(Boolean).join(" ");
-  return [record.address_line1, region].filter(Boolean).join(", ") || "—";
 }

@@ -13,7 +13,7 @@ import {
 } from "../../api/queries";
 import type { PropertyStatus, Unit } from "../../api/types";
 import { Stamp } from "../../components/Stamp";
-import { calendarDate, orDashNumber } from "../../format";
+import { calendarDate, DASH, orDashNumber } from "../../format";
 import {
   blankUnitDraft,
   emptyDraft,
@@ -193,7 +193,7 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
       )}
 
       <dl className="card__fields">
-        <Row label="Nickname" editing={editing} value={draft.nickname || "—"} htmlFor="nickname">
+        <Row label="Nickname" editing={editing} value={draft.nickname || DASH} htmlFor="nickname">
           <input
             id="nickname"
             className={entryClass(problemFor("nickname"))}
@@ -206,7 +206,7 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
         <Row
           label="Address"
           editing={editing}
-          value={draft.address_line1 || "—"}
+          value={draft.address_line1 || DASH}
           htmlFor="address_line1"
         >
           <input
@@ -221,7 +221,7 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
         <Row
           label="Line 2"
           editing={editing}
-          value={draft.address_line2 || "—"}
+          value={draft.address_line2 || DASH}
           htmlFor="address_line2"
         >
           <input
@@ -236,7 +236,7 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
         <Row
           label="City / State / ZIP"
           editing={editing}
-          value={[draft.city, draft.state, draft.postal_code].filter(Boolean).join(" ") || "—"}
+          value={[draft.city, draft.state, draft.postal_code].filter(Boolean).join(" ") || DASH}
           htmlFor="city"
         >
           <div className="entry-group">
@@ -269,7 +269,7 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
           </div>
         </Row>
 
-        <Row label="County" editing={editing} value={draft.county || "—"} htmlFor="county">
+        <Row label="County" editing={editing} value={draft.county || DASH} htmlFor="county">
           <input
             id="county"
             className="entry"
@@ -315,7 +315,7 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
         <Row
           label="Price"
           editing={editing}
-          value={draft.purchase_price ? `$${draft.purchase_price}` : "—"}
+          value={draft.purchase_price ? `$${draft.purchase_price}` : DASH}
           htmlFor="purchase_price"
           hint={problemFor("purchase_price")}
         >
@@ -390,7 +390,7 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
           </div>
         </Row>
 
-        <Row label="Notes" editing={editing} value={draft.notes || "—"} htmlFor="notes" block>
+        <Row label="Notes" editing={editing} value={draft.notes || DASH} htmlFor="notes" block>
           <textarea
             id="notes"
             className="entry"
@@ -401,7 +401,7 @@ export function Overview({ isNew = false }: { isNew?: boolean }) {
         </Row>
 
         {!editing && !isNew && (
-          <Row label="Match key" editing={false} value={property.data?.normalized_address || "—"}>
+          <Row label="Match key" editing={false} value={property.data?.normalized_address || DASH}>
             <span />
           </Row>
         )}
@@ -608,7 +608,7 @@ function unitFacts(unit: UnitDraft): string {
     unit.baths ? `${unit.baths} ba` : null,
     unit.sqft ? `${unit.sqft} sq ft` : null,
   ].filter(Boolean);
-  return parts.length > 0 ? parts.join("  ") : "—";
+  return parts.length > 0 ? parts.join("  ") : DASH;
 }
 
 /**

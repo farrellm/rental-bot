@@ -10,9 +10,7 @@ import {
 import type { ChannelStanding, Notice, PairingCode, Severity } from "../api/types";
 import { FieldRow } from "../components/FieldRow";
 import { Stamp, type StampState } from "../components/Stamp";
-import { ago, clock, dayKey, dayRule, hourMinute, plural, timestamp } from "../format";
-
-const DASH = "—";
+import { ago, clock, DASH, dayKey, dayRule, hourMinute, plural, timestamp } from "../format";
 
 /** The channel's state and the word stamped on the card are one vocabulary. */
 const STATE_STAMP: Record<ChannelStanding["state"], StampState> = {

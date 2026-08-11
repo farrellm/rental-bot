@@ -12,10 +12,8 @@ import {
 import type { EmailMessage, EmailStatus, IntakeStanding } from "../api/types";
 import { FieldRow } from "../components/FieldRow";
 import { Stamp, type StampState } from "../components/Stamp";
-import { ago, bytes, clock, dayKey, dayRule, hourMinute, plural, timestamp } from "../format";
+import { ago, bytes, clock, DASH, dayKey, dayRule, hourMinute, plural, timestamp } from "../format";
 import { Dispatch } from "./Dispatch";
-
-const DASH = "—";
 
 /** The mailbox's state and the word stamped on the card are one vocabulary. */
 const STATE_STAMP: Record<IntakeStanding["state"], StampState> = {

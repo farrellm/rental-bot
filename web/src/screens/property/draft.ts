@@ -7,7 +7,7 @@
  * back to 3 under their cursor.
  */
 
-import { money, parseMoney } from "../../format";
+import { isCalendarDate, money, parseMoney } from "../../format";
 import type {
   PropertyDetail,
   PropertyStatus,
@@ -178,7 +178,7 @@ export function toPropertyWrite(
     const date = draft.purchase_date.trim();
     if (date === "") {
       body.purchase_date = null;
-    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    } else if (!isCalendarDate(date)) {
       problems.push({ field: "purchase_date", message: "Write the date as YYYY-MM-DD." });
     } else {
       body.purchase_date = date;

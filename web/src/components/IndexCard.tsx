@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 
-import { fileNumber, plural } from "../format";
+import { fileNumber, oneLineAddress, plural } from "../format";
 import type { PropertyListItem } from "../api/types";
 import { Stamp } from "./Stamp";
 
@@ -19,7 +19,15 @@ export function IndexCard({ property }: { property: PropertyListItem }) {
         <span className="index__no mono">{fileNumber(property.id)}</span>
       </header>
 
-      <p className="index__address mono">{shortAddress(property)}</p>
+      {/* No postal code: an index card carries what you need to pick a record
+          out of a stack, and the ZIP is not part of that. */}
+      <p className="index__address mono">
+        {oneLineAddress({
+          address_line1: property.address_line1,
+          city: property.city,
+          state: property.state,
+        })}
+      </p>
 
       <footer className="index__foot">
         <span className="index__units mono">{plural(property.unit_count, "unit", "units")}</span>
@@ -27,10 +35,4 @@ export function IndexCard({ property }: { property: PropertyListItem }) {
       </footer>
     </Link>
   );
-}
-
-/** The address on one line, skipping the parts that were never filled in. */
-function shortAddress(property: { address_line1: string; city: string; state: string }): string {
-  const region = [property.city, property.state].filter(Boolean).join(" ");
-  return [property.address_line1, region].filter(Boolean).join(", ");
 }
