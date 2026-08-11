@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -499,7 +500,7 @@ func validateProperty(nickname, addressLine1, status string, purchaseDate *strin
 		return "The street address is longer than 200 characters."
 	}
 
-	if !slicesContains(propertyStatuses, status) {
+	if !slices.Contains(propertyStatuses, status) {
 		return "Status has to be one of " + strings.Join(propertyStatuses, ", ") + "."
 	}
 	if purchaseDate != nil && !isCalendarDate(*purchaseDate) {
@@ -528,15 +529,6 @@ func validateProperty(nickname, addressLine1, status string, purchaseDate *strin
 func isCalendarDate(s string) bool {
 	t, err := time.Parse(time.DateOnly, s)
 	return err == nil && t.Format(time.DateOnly) == s
-}
-
-func slicesContains(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *server) propertyReadError(w http.ResponseWriter, r *http.Request, err error) {

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -9,7 +10,7 @@ import (
 	"fmt"
 	"io/fs"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -204,7 +205,7 @@ func loadMigrations(fsys fs.FS) ([]migrationFile, error) {
 			SQL:      string(body),
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Version < out[j].Version })
+	slices.SortFunc(out, func(a, b migrationFile) int { return cmp.Compare(a.Version, b.Version) })
 	return out, nil
 }
 

@@ -3,6 +3,7 @@ package alert
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -248,5 +249,5 @@ func (b *Bus) cooldownFor(s Severity) time.Duration {
 func (b *Bus) snapshot() []Sink {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	return append([]Sink(nil), b.sinks...)
+	return slices.Clone(b.sinks)
 }

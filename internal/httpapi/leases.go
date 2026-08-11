@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -355,7 +356,7 @@ func (s *server) handleAddLeaseTenant(w http.ResponseWriter, r *http.Request) {
 	if req.Role == "" {
 		req.Role = "primary"
 	}
-	if !slicesContains(tenantRoles, req.Role) {
+	if !slices.Contains(tenantRoles, req.Role) {
 		WriteProblem(w, r, http.StatusUnprocessableEntity,
 			"Role has to be one of "+strings.Join(tenantRoles, ", ")+".")
 		return
@@ -468,7 +469,7 @@ func validateLease(startDate string, endDate *string, status string,
 			return "A lease cannot end before it starts."
 		}
 	}
-	if !slicesContains(leaseStatuses, status) {
+	if !slices.Contains(leaseStatuses, status) {
 		return "Status has to be one of " + strings.Join(leaseStatuses, ", ") + "."
 	}
 	if dueDay != nil && (*dueDay < 1 || *dueDay > 31) {

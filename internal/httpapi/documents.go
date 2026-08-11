@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -189,7 +190,7 @@ func (s *server) handleUploadDocument(w http.ResponseWriter, r *http.Request) {
 	if kind == "" {
 		kind = "other"
 	}
-	if !slicesContains(documentKinds, kind) {
+	if !slices.Contains(documentKinds, kind) {
 		WriteProblem(w, r, http.StatusUnprocessableEntity,
 			"Kind has to be one of "+strings.Join(documentKinds, ", ")+".")
 		return
@@ -494,7 +495,7 @@ func (s *server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 		}
 
 		current.Title = strings.TrimSpace(current.Title)
-		if !slicesContains(documentKinds, current.Kind) {
+		if !slices.Contains(documentKinds, current.Kind) {
 			return validationError{"Kind has to be one of " + strings.Join(documentKinds, ", ") + "."}
 		}
 		if len(current.Title) > 200 {
@@ -566,7 +567,7 @@ func (s *server) handleLinkDocument(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	if !slicesContains(linkEntityTypes, req.EntityType) {
+	if !slices.Contains(linkEntityTypes, req.EntityType) {
 		WriteProblem(w, r, http.StatusUnprocessableEntity,
 			"entity_type has to be one of "+strings.Join(linkEntityTypes, ", ")+".")
 		return
@@ -633,7 +634,7 @@ func parseLinkFields(w http.ResponseWriter, r *http.Request, fields map[string]s
 			"Filing a document against a record needs both entity_type and entity_id.")
 		return nil, false
 	}
-	if !slicesContains(linkEntityTypes, entityType) {
+	if !slices.Contains(linkEntityTypes, entityType) {
 		WriteProblem(w, r, http.StatusUnprocessableEntity,
 			"entity_type has to be one of "+strings.Join(linkEntityTypes, ", ")+".")
 		return nil, false

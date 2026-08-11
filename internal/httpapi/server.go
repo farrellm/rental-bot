@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -230,21 +230,21 @@ func allowHeader(m methods) string {
 			names = append(names, http.MethodHead)
 		}
 	}
-	sort.Slice(names, func(i, j int) bool { return rank(names[i]) < rank(names[j]) })
+	slices.SortFunc(names, func(a, b string) int { return rank(a) - rank(b) })
 	return strings.Join(names, ", ")
 }
 
-// rank orders methods the way a person reads them rather than alphabetically:
-// what you can read, then what you can do.
+// methodOrder is how a person reads a set of methods rather than how the
+// alphabet does: what you can read, then what you can do.
+var methodOrder = []string{
+	http.MethodGet, http.MethodHead, http.MethodPost,
+	http.MethodPatch, http.MethodPut, http.MethodDelete,
+}
+
+// rank places a method in that order, putting anything unlisted last.
 func rank(method string) int {
-	order := []string{
-		http.MethodGet, http.MethodHead, http.MethodPost,
-		http.MethodPatch, http.MethodPut, http.MethodDelete,
+	if i := slices.Index(methodOrder, method); i >= 0 {
+		return i
 	}
-	for i, m := range order {
-		if m == method {
-			return i
-		}
-	}
-	return len(order)
+	return len(methodOrder)
 }

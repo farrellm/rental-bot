@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 
 	"github.com/farrellm/rental-bot/internal/jobs"
@@ -81,7 +82,7 @@ func (w *Watchdog) Add(name string, p Probe) {
 // because the screen still says it is running.
 func (w *Watchdog) Sweep(ctx context.Context) error {
 	w.mu.Lock()
-	probes := append([]namedProbe(nil), w.probes...)
+	probes := slices.Clone(w.probes)
 	w.mu.Unlock()
 
 	for _, p := range probes {

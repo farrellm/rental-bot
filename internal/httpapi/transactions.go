@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -116,7 +117,7 @@ func readLedgerFilter(w http.ResponseWriter, r *http.Request) (ledgerFilter, boo
 	}
 
 	if raw := strings.TrimSpace(q.Get("category")); raw != "" {
-		if !slicesContains(transactionCategories, raw) {
+		if !slices.Contains(transactionCategories, raw) {
 			WriteProblem(w, r, http.StatusBadRequest,
 				"category has to be one of "+strings.Join(transactionCategories, ", ")+".")
 			return f, false
@@ -404,7 +405,7 @@ func validateTransaction(occurredOn, category string) string {
 	if !isCalendarDate(occurredOn) {
 		return "The date has to be written as YYYY-MM-DD."
 	}
-	if !slicesContains(transactionCategories, category) {
+	if !slices.Contains(transactionCategories, category) {
 		return "Category has to be one of " + strings.Join(transactionCategories, ", ") + "."
 	}
 	return ""

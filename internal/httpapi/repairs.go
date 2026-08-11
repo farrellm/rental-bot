@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -104,7 +105,7 @@ func (s *server) handleListRepairs(w http.ResponseWriter, r *http.Request) {
 
 	var status *string
 	if raw := strings.TrimSpace(r.URL.Query().Get("status")); raw != "" {
-		if !slicesContains(repairStatuses, raw) {
+		if !slices.Contains(repairStatuses, raw) {
 			WriteProblem(w, r, http.StatusBadRequest,
 				"status has to be one of "+strings.Join(repairStatuses, ", ")+".")
 			return
@@ -451,7 +452,7 @@ func validateRepair(openedOn string, closedOn *string, status string,
 	if !isCalendarDate(openedOn) {
 		return "The opening date has to be written as YYYY-MM-DD."
 	}
-	if !slicesContains(repairStatuses, status) {
+	if !slices.Contains(repairStatuses, status) {
 		return "Status has to be one of " + strings.Join(repairStatuses, ", ") + "."
 	}
 	if closedOn != nil {

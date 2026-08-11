@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -46,7 +46,7 @@ func decodePatch(w http.ResponseWriter, r *http.Request, known ...string) (patch
 		}
 	}
 	if len(unknown) > 0 {
-		sort.Strings(unknown)
+		slices.Sort(unknown)
 		WriteProblem(w, r, http.StatusBadRequest,
 			"The request body has fields this endpoint does not accept: "+
 				strings.Join(unknown, ", ")+".")
