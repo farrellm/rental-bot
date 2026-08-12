@@ -154,6 +154,7 @@ func run(m modes) error {
 		Archive:      ingestion.archive,
 		PushVerifier: ingestion.verifier,
 		Alerts:       bg.bus,
+		Ingest:       ingestion.pipeline,
 		Telegram:     channel.store,
 		Limiter:      auth.NewLimiter(),
 		Logger:       logger,

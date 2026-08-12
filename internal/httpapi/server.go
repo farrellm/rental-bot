@@ -17,6 +17,7 @@ import (
 	"github.com/farrellm/rental-bot/internal/blob"
 	"github.com/farrellm/rental-bot/internal/config"
 	"github.com/farrellm/rental-bot/internal/gmail"
+	"github.com/farrellm/rental-bot/internal/ingest"
 	"github.com/farrellm/rental-bot/internal/jobs"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/telegram"
@@ -65,6 +66,10 @@ type Options struct {
 	// means alerting is not configured, which is a working state — the process
 	// still logs, it just says nothing out loud.
 	Alerts alert.Publisher
+	// Ingest owns the proposal gate. A nil one means no model is configured,
+	// which is a working state: the queue is still readable, and settling a
+	// proposal answers 503 because the apply path lives there.
+	Ingest *ingest.Pipeline
 	// Telegram owns the paired chat. A nil Telegram means no bot is
 	// configured: the routes answer 503 and the intake screen says which
 	// configuration keys are missing.
@@ -99,6 +104,7 @@ type server struct {
 	pushVerifier *gmail.Verifier
 
 	alerts   alert.Publisher
+	ingest   *ingest.Pipeline
 	telegram *telegram.Store
 
 	// pushRefusals guards the counter behind the throttled log line for
@@ -137,6 +143,7 @@ func New(opts Options) http.Handler {
 		pushVerifier: opts.PushVerifier,
 
 		alerts:   opts.Alerts,
+		ingest:   opts.Ingest,
 		telegram: opts.Telegram,
 	}
 
@@ -163,6 +170,7 @@ func New(opts Options) http.Handler {
 	s.routeLeases(mux)
 	s.routeTenants(mux)
 	s.routeIntake(mux)
+	s.routeReview(mux)
 	s.routeTelegram(mux)
 
 	// Anything else under /api/ is a client mistake, and it gets a
