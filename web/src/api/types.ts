@@ -521,3 +521,172 @@ export interface NoticePage {
   items: Notice[];
   next_cursor?: string;
 }
+
+/* The review queue ------------------------------------------------------- */
+
+/** Every status the ingest_proposals CHECK allows, in the column's order. */
+export type ProposalStatus = "pending" | "approved" | "rejected" | "auto_applied";
+
+/** Every kind the classifier can answer with. Four of them have a form. */
+export type ProposalKind =
+  | "receipt"
+  | "lease"
+  | "insurance"
+  | "mortgage_statement"
+  | "repair"
+  | "valuation"
+  | "note"
+  | "unknown";
+
+/**
+ * What the model read off a document, before anybody agreed to it.
+ *
+ * `payload` is deliberately loose. Its shape is the kind's — a receipt and a
+ * lease have nothing in common — and the slip renders it field by field
+ * against the kind rather than the API flattening four shapes into one.
+ */
+export interface Proposal {
+  id: number;
+  status: ProposalStatus;
+  kind: ProposalKind;
+  payload: Record<string, unknown>;
+  /** How sure the model was. A margin mark on the slip, never a stamp. */
+  confidence: number | null;
+  /** What the document said, verbatim. */
+  property_hint: string;
+  /** What the folding matched it to, or null when it matched nothing. */
+  property_id: number | null;
+  property_nickname: string | null;
+  reasoning: string;
+  /** Why an apply was refused, when one was. */
+  error: string;
+  llm_model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  email_message_id: number;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  applied_entity_type: string | null;
+  applied_entity_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One line of the review register. */
+export interface ProposalLine extends Proposal {
+  subject: string;
+  from_addr: string;
+  received_at: string;
+  enclosures: number;
+}
+
+export interface ProposalEnclosure {
+  id: number;
+  document_id: number | null;
+  filename: string;
+  mime: string;
+  size_bytes: number;
+  skipped_reason: string;
+}
+
+/** The portfolio, for the picker that corrects a match. */
+export interface ProposalPropertyName {
+  id: number;
+  nickname: string;
+  address: string;
+}
+
+export interface ProposalDetail extends Proposal {
+  subject: string;
+  from_addr: string;
+  received_at: string;
+  snippet: string;
+  enclosures: ProposalEnclosure[];
+  property: Property | null;
+  properties: ProposalPropertyName[];
+}
+
+export interface ProposalPage {
+  items: ProposalLine[];
+  next_cursor?: string;
+  /** The register's tally, by status. */
+  counts: Record<string, number>;
+}
+
+/** A correction, sent before the proposal is agreed to. */
+export interface ProposalWrite {
+  kind?: ProposalKind;
+  payload?: Record<string, unknown>;
+  property_id?: number | null;
+}
+
+/* Insurance and mortgages ------------------------------------------------ */
+
+export type PolicyType = "hazard" | "flood" | "umbrella" | "liability";
+
+/**
+ * A policy as an applied proposal wrote it.
+ *
+ * The policy number is not here and never will be: it is encrypted at rest,
+ * and a screen that lists policies has no use for it worth decrypting it for.
+ */
+export interface InsurancePolicy {
+  id: number;
+  property_id: number;
+  carrier: string;
+  type: PolicyType;
+  agent_name: string;
+  agent_phone: string;
+  agent_email: string;
+  effective_date: string | null;
+  expiration_date: string | null;
+  annual_premium_cents: number | null;
+  dwelling_coverage_cents: number | null;
+  liability_coverage_cents: number | null;
+  deductible_cents: number | null;
+  document_id: number | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InsuranceList {
+  items: InsurancePolicy[];
+}
+
+/** One statement, append-only: the amortization history is these in a row. */
+export interface MortgageStatement {
+  id: number;
+  statement_date: string;
+  principal_balance_cents: number | null;
+  payment_cents: number | null;
+  principal_paid_cents: number | null;
+  interest_paid_cents: number | null;
+  escrow_paid_cents: number | null;
+  document_id: number | null;
+  created_at: string;
+}
+
+export interface Mortgage {
+  id: number;
+  property_id: number;
+  lender: string;
+  original_principal_cents: number | null;
+  /** Basis points, not a float: 6.375% is 637, and the arithmetic is exact. */
+  interest_rate_bps: number | null;
+  term_months: number | null;
+  origination_date: string | null;
+  monthly_pi_cents: number | null;
+  escrow_monthly_cents: number | null;
+  current_balance_cents: number | null;
+  balance_as_of: string | null;
+  payoff_date: string | null;
+  notes: string;
+  statements: MortgageStatement[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MortgageList {
+  items: Mortgage[];
+}

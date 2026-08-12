@@ -425,12 +425,12 @@ func (s *server) settleProposal(w http.ResponseWriter, r *http.Request, settle f
 	if !ok {
 		return
 	}
-	// Deciding does not need a model. A proposal already on file can be
-	// approved on a host whose llm.provider was since blanked -- but the
-	// pipeline is what owns the apply path, so without it there is nothing to
-	// call.
+	// Deciding does not need a model, and the pipeline is built whether or not
+	// there is one: a proposal already on file stays settleable on a host
+	// whose llm.provider has since been blanked. A nil one here means the
+	// wiring is wrong rather than that the operator declined something.
 	if s.ingest == nil {
-		WriteProblem(w, r, http.StatusServiceUnavailable, "Reading forwarded mail is not configured.")
+		WriteProblem(w, r, http.StatusServiceUnavailable, "The review queue is not configured.")
 		return
 	}
 

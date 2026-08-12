@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/farrellm/rental-bot/internal/blob"
@@ -14,6 +15,7 @@ import (
 	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/jobs"
 	"github.com/farrellm/rental-bot/internal/llm"
+	"github.com/farrellm/rental-bot/internal/secret"
 	"github.com/farrellm/rental-bot/internal/store"
 	"github.com/farrellm/rental-bot/internal/store/sqlc"
 	"github.com/farrellm/rental-bot/migrations"
@@ -89,12 +91,21 @@ func newDesk(t *testing.T, reader *fakeReader) *desk {
 		t.Fatalf("blob.New: %v", err)
 	}
 
+	// A real box, because a policy number reaching the database in the clear
+	// is exactly the thing section 9.2 exists to prevent, and a test that
+	// leaves it nil would never notice.
+	box, err := secret.New([]byte("a test encryption key"))
+	if err != nil {
+		t.Fatalf("secret.New: %v", err)
+	}
+
 	queue := jobs.NewQueue(repo)
 	pipeline := New(Options{
 		Repo:   repo,
 		Blobs:  blobs,
 		Reader: reader,
 		Queue:  queue,
+		Box:    box,
 		Config: config.LLM{
 			MaxAttachmentBytes:  10 << 20,
 			AutoApply:           true,
@@ -560,9 +571,10 @@ func TestAMortgageStatementIsAppendedOnce(t *testing.T) {
 	if mortgage.CurrentBalanceCents == nil || *mortgage.CurrentBalanceCents != domain.Money(19_450_000) {
 		t.Fatalf("balance = %v, want the statement's", mortgage.CurrentBalanceCents)
 	}
-	// The loan number does not sit in the database in the clear.
-	if mortgage.LoanNumberEnc == "" || mortgage.LoanNumberEnc == "0099-4412" {
-		t.Logf("loan number stored as %q", mortgage.LoanNumberEnc)
+	// The loan number does not sit in the database in the clear. A copy of
+	// this file without the key does not hand over an account number.
+	if mortgage.LoanNumberEnc == "" || strings.Contains(mortgage.LoanNumberEnc, "0099-4412") {
+		t.Fatalf("loan number stored as %q, want ciphertext", mortgage.LoanNumberEnc)
 	}
 
 	second := d.read(d.forward("gmail-stmt-2", "Fwd: statement again", []byte("%PDF-1.4 two")).ID)
@@ -645,6 +657,70 @@ func TestAFailedReadLeavesTheMessageForTheSweep(t *testing.T) {
 	}
 	if queued != 1 {
 		t.Fatalf("the sweep queued %d messages, want 1", queued)
+	}
+}
+
+// A proposal on file has to stay settleable on a host that has since turned
+// the model off. Approving does not call one -- the reading is already there —
+// and a queue nobody can clear is a queue that stops being read.
+func TestSettlingNeedsNoModel(t *testing.T) {
+	d := newDesk(t, receiptReader(0.40, "412 Elm St, Athens, OH 45701"))
+	ctx := t.Context()
+
+	msg := d.forward("gmail-unread", "Fwd: receipt", []byte("%PDF-1.4"))
+	proposal := d.read(msg.ID)
+
+	// The model goes away, as it does when llm.provider is blanked.
+	d.pipeline.reader = nil
+	if d.pipeline.Reads() {
+		t.Fatal("Reads() is true with no reader")
+	}
+
+	settled, err := d.pipeline.Apply(ctx, proposal.ID, ActorWeb, &d.operator)
+	if err != nil {
+		t.Fatalf("Apply with no model: %v", err)
+	}
+	if settled.Status != "approved" {
+		t.Fatalf("status = %q, want approved", settled.Status)
+	}
+
+	// What does need a model says so, rather than panicking on a nil one.
+	if err := d.pipeline.Classify(ctx, msg.ID); !errors.Is(err, ErrNoReader) {
+		t.Fatalf("Classify with no model = %v, want ErrNoReader", err)
+	}
+	if queued, err := d.pipeline.Sweep(ctx); err != nil || queued != 0 {
+		t.Fatalf("Sweep with no model = %d, %v, want 0 and no error", queued, err)
+	}
+}
+
+// An account number with nowhere safe to go is a refusal, not a silent drop.
+func TestAnAccountNumberNeedsAKey(t *testing.T) {
+	d := newDesk(t, &fakeReader{
+		classification: llm.Classification{
+			Kind: "insurance", PropertyHint: "412 Elm St, Athens, OH 45701", Confidence: 0.9,
+		},
+		extracted: llm.InsuranceExtract{
+			Carrier:           "State Farm",
+			PolicyNumber:      "OH-7741-2290",
+			Type:              "hazard",
+			EffectiveDateISO:  "2026-01-01",
+			ExpirationDateISO: "2027-01-01",
+			AddressGuess:      "412 Elm St, Athens, OH 45701",
+		},
+	})
+
+	// The state of a host that never set RENTAL_BOT_SECRET_KEY.
+	d.pipeline.box = nil
+
+	proposal := d.read(d.forward("gmail-policy", "Fwd: declarations", []byte("%PDF-1.4")).ID)
+	_, err := d.pipeline.Apply(d.t.Context(), proposal.ID, ActorWeb, nil)
+
+	var refusal Refusal
+	if !errors.As(err, &refusal) {
+		t.Fatalf("Apply = %v, want a refusal naming the missing key", err)
+	}
+	if !strings.Contains(refusal.Reason, "SECRET_KEY") {
+		t.Fatalf("refusal = %q, want it to name the key", refusal.Reason)
 	}
 }
 

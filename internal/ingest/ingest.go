@@ -15,6 +15,7 @@ package ingest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -81,8 +82,12 @@ type Pipeline struct {
 
 // Options carry the pieces the pipeline cannot build for itself.
 type Options struct {
-	Repo   *store.Repo
-	Blobs  *blob.Store
+	Repo  *store.Repo
+	Blobs *blob.Store
+	// Reader is nil when no model is configured. The pipeline still applies
+	// and rejects proposals in that state -- deciding about a reading that is
+	// already on file does not need the thing that made it, and a host that
+	// turned the model off should still be able to clear its queue.
 	Reader Reader
 	Queue  *jobs.Queue
 	// Notify wakes the runner, so an extract enqueued by a classify starts now
@@ -117,6 +122,12 @@ func New(opts Options) *Pipeline {
 	}
 }
 
+// Reads reports whether there is a model behind this pipeline.
+//
+// Everything that talks to one is guarded by it; everything that settles a
+// proposal is not.
+func (p *Pipeline) Reads() bool { return p != nil && p.reader != nil }
+
 // EnqueueClassify queues the reading of one message.
 //
 // It is exported because the Gmail syncer calls it the moment a message's
@@ -125,7 +136,8 @@ func New(opts Options) *Pipeline {
 // per message, and the index behind it is partial over pending jobs, so the
 // sweep re-enqueuing the same message costs one refused insert.
 func (p *Pipeline) EnqueueClassify(ctx context.Context, messageID int64) error {
-	if p == nil {
+	if !p.Reads() {
+		// Nothing would handle the job. The message is filed either way.
 		return nil
 	}
 	added, err := p.queue.EnqueueOnce(ctx, KindClassify, classifyKey(messageID), classifyPayload{EmailMessageID: messageID})
@@ -164,6 +176,9 @@ type extractPayload struct {
 // refused would fill the queue with jobs that spend their attempts and then
 // dead-letter, and the condition is already being reported by the breaker.
 func (p *Pipeline) Sweep(ctx context.Context) (int, error) {
+	if !p.Reads() {
+		return 0, nil
+	}
 	if err := p.budgetOpen(ctx); err != nil {
 		p.log.Warn("skipping the ingest sweep", "reason", err)
 		return 0, nil
@@ -188,7 +203,18 @@ func (p *Pipeline) Sweep(ctx context.Context) (int, error) {
 }
 
 // budgetOpen reports whether there is budget left, without spending any.
-func (p *Pipeline) budgetOpen(ctx context.Context) error { return p.reader.Available(ctx) }
+func (p *Pipeline) budgetOpen(ctx context.Context) error {
+	if !p.Reads() {
+		return ErrNoReader
+	}
+	return p.reader.Available(ctx)
+}
+
+// ErrNoReader reports that no model is configured, so nothing can be read.
+//
+// It is not a failure of the work: the mail is archived and filed, and the
+// sweep will read it if a model is ever configured.
+var ErrNoReader = errors.New("ingest: no model is configured")
 
 // enclosures loads what came attached to a message, as far as the caps allow.
 //

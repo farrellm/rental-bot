@@ -602,8 +602,14 @@ func (p *Pipeline) audit(ctx context.Context, q *sqlc.Queries, actor Actor, user
 // hashing to a different value would file each one twice.
 func (p *Pipeline) seal(value string) (string, error) {
 	value = strings.TrimSpace(value)
-	if value == "" || p.box == nil {
+	if value == "" {
 		return "", nil
+	}
+	if p.box == nil {
+		// Dropping it silently would file a policy that quietly lost its
+		// number; storing it in the clear would be worse. Refusing says which
+		// key is missing while the reading is still on the proposal.
+		return "", refuse("this record carries an account number and RENTAL_BOT_SECRET_KEY is not set")
 	}
 	sealed, err := p.box.SealString(value)
 	if err != nil {

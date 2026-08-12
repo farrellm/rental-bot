@@ -21,6 +21,9 @@ import (
 // lets the budget breaker read one column instead of keeping a ledger of its
 // own.
 func (p *Pipeline) Classify(ctx context.Context, messageID int64) error {
+	if !p.Reads() {
+		return ErrNoReader
+	}
 	msg, err := p.repo.Read().GetEmailMessage(ctx, messageID)
 	if store.NotFound(err) {
 		// Deleted while this sat in the queue. Nothing to read.

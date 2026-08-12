@@ -9,8 +9,9 @@ import { Overview } from "./property/Overview";
  * The divider tabs, in the order they are cut.
  *
  * The empty path is Overview, which is the record's index route. §7.2 of the
- * design has three more — Insurance, Mortgage, Value — arriving with the
- * milestones that fill them; they are a row in this list when they do.
+ * design has one more — Value — arriving with the milestone that fills it; it
+ * is a row in this list when it does. Insurance and Mortgage arrived with M4,
+ * because that is the milestone that started writing to them.
  */
 const SECTIONS: { path: string; label: string }[] = [
   { path: "", label: "Overview" },
@@ -18,6 +19,8 @@ const SECTIONS: { path: string; label: string }[] = [
   { path: "repairs", label: "Repairs" },
   { path: "leases", label: "Leases" },
   { path: "documents", label: "Documents" },
+  { path: "insurance", label: "Insurance" },
+  { path: "mortgage", label: "Mortgage" },
 ];
 
 /**

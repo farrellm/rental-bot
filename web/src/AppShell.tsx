@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { signOut } from "./api";
+import { signOut, usePendingCount } from "./api";
 
 /**
  * The desk and the label on the drawer.
@@ -13,6 +13,10 @@ import { signOut } from "./api";
 export function AppShell() {
   const navigate = useNavigate();
   const client = useQueryClient();
+  // What is waiting, in the drawer label. It is the one number in this
+  // application that asks for something to be done, so it is the one that
+  // earns a place outside the card it belongs to.
+  const waiting = usePendingCount();
 
   async function handleSignOut() {
     try {
@@ -34,6 +38,10 @@ export function AppShell() {
         <nav className="shell__nav">
           <NavLink to="/properties" className="shell__link">
             Properties
+          </NavLink>
+          <NavLink to="/review" className="shell__link">
+            Review
+            {waiting > 0 && <span className="shell__count mono">{waiting}</span>}
           </NavLink>
           <NavLink to="/intake" className="shell__link">
             Intake

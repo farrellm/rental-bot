@@ -20,6 +20,9 @@ import (
 // a misread, and catching it here is what keeps the review screen a place to
 // confirm rather than a place to find mistakes.
 func (p *Pipeline) Extract(ctx context.Context, proposalID int64) error {
+	if !p.Reads() {
+		return ErrNoReader
+	}
 	proposal, err := p.repo.Read().GetProposal(ctx, proposalID)
 	if store.NotFound(err) {
 		return nil
