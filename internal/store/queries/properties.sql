@@ -26,6 +26,17 @@ LIMIT sqlc.arg(page_size);
 -- name: GetProperty :one
 SELECT * FROM properties WHERE id = ? LIMIT 1;
 
+-- Everything the property matcher needs and nothing else.
+--
+-- The comparison is deterministic Go over the folded address (docs/DESIGN.md
+-- section 5.3), not SQL, because "close enough" is an edit distance and SQLite
+-- cannot spell one. The portfolio is tens of rows, so loading all of them and
+-- comparing in memory is cheaper than the index that would let the database
+-- try.
+-- name: ListPropertyMatchKeys :many
+SELECT id, nickname, normalized_address FROM properties
+ORDER BY id;
+
 -- name: CreateProperty :one
 INSERT INTO properties (
     nickname, address_line1, address_line2, city, state, postal_code, county,

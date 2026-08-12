@@ -58,6 +58,29 @@ func (q *Queries) DeleteTenant(ctx context.Context, id int64) (int64, error) {
 	return result.RowsAffected()
 }
 
+const findTenantByName = `-- name: FindTenantByName :one
+SELECT id, name, email, phone, notes, created_at, updated_at FROM tenants WHERE name = ? ORDER BY id LIMIT 1
+`
+
+// An extracted lease names its tenants and nothing else. Matching on the name
+// is what keeps one person from becoming three rows when three leases are
+// forwarded; it is a weak key, and the apply path never merges on it silently
+// -- an operator sees the match before the lease is filed.
+func (q *Queries) FindTenantByName(ctx context.Context, name string) (Tenant, error) {
+	row := q.db.QueryRowContext(ctx, findTenantByName, name)
+	var i Tenant
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.Phone,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getTenant = `-- name: GetTenant :one
 SELECT id, name, email, phone, notes, created_at, updated_at FROM tenants WHERE id = ? LIMIT 1
 `

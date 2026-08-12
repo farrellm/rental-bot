@@ -8,6 +8,20 @@ import (
 	"github.com/farrellm/rental-bot/internal/domain"
 )
 
+type AuditLog struct {
+	ID         int64
+	UserID     *int64
+	Actor      string
+	At         string
+	Action     string
+	EntityType string
+	EntityID   *int64
+	Before     string
+	After      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
 type Document struct {
 	ID               int64
 	PropertyID       *int64
@@ -79,6 +93,49 @@ type GmailAccount struct {
 	UpdatedAt       string
 }
 
+type IngestProposal struct {
+	ID                int64
+	EmailMessageID    int64
+	Kind              string
+	Payload           string
+	LlmModel          string
+	PromptTokens      int64
+	CompletionTokens  int64
+	Confidence        *float64
+	PropertyHint      string
+	PropertyID        *int64
+	Reasoning         string
+	Status            string
+	ReviewedBy        *int64
+	ReviewedAt        *string
+	AppliedEntityType *string
+	AppliedEntityID   *int64
+	Error             string
+	CreatedAt         string
+	UpdatedAt         string
+}
+
+type InsurancePolicy struct {
+	ID                     int64
+	PropertyID             int64
+	Carrier                string
+	PolicyNumberEnc        string
+	Type                   string
+	AgentName              string
+	AgentPhone             string
+	AgentEmail             string
+	EffectiveDate          *string
+	ExpirationDate         *string
+	AnnualPremiumCents     *domain.Money
+	DwellingCoverageCents  *domain.Money
+	LiabilityCoverageCents *domain.Money
+	DeductibleCents        *domain.Money
+	DocumentID             *int64
+	Notes                  string
+	CreatedAt              string
+	UpdatedAt              string
+}
+
 type Job struct {
 	ID          int64
 	Kind        string
@@ -125,6 +182,39 @@ type LeaseTenant struct {
 	Role      string
 	CreatedAt string
 	UpdatedAt string
+}
+
+type Mortgage struct {
+	ID                     int64
+	PropertyID             int64
+	Lender                 string
+	LoanNumberEnc          string
+	OriginalPrincipalCents *domain.Money
+	InterestRateBps        *int64
+	TermMonths             *int64
+	OriginationDate        *string
+	MonthlyPiCents         *domain.Money
+	EscrowMonthlyCents     *domain.Money
+	CurrentBalanceCents    *domain.Money
+	BalanceAsOf            *string
+	PayoffDate             *string
+	Notes                  string
+	CreatedAt              string
+	UpdatedAt              string
+}
+
+type MortgageStatement struct {
+	ID                    int64
+	MortgageID            int64
+	StatementDate         string
+	PrincipalBalanceCents *domain.Money
+	PaymentCents          *domain.Money
+	PrincipalPaidCents    *domain.Money
+	InterestPaidCents     *domain.Money
+	EscrowPaidCents       *domain.Money
+	DocumentID            *int64
+	CreatedAt             string
+	UpdatedAt             string
 }
 
 type Notification struct {
@@ -250,6 +340,7 @@ type Transaction struct {
 	NeedsReview   int64
 	CreatedAt     string
 	UpdatedAt     string
+	ProposalID    *int64
 }
 
 type Unit struct {
