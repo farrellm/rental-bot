@@ -1,6 +1,9 @@
 package domain
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // NormalizeAddress folds an address into the canonical form stored in
 // properties.normalized_address and matched against in the ingestion pipeline.
@@ -39,6 +42,117 @@ func NormalizeAddress(line1, line2, city, state, postal string) string {
 		parts = append(parts, z)
 	}
 	return strings.Join(parts, " ")
+}
+
+// FreeAddress is a single-string address broken into the fields
+// NormalizeAddress takes.
+//
+// A model returns one string, because that is how an address appears on a
+// document. This is where it becomes the five fields the stored side already
+// keeps it in, so both halves of a comparison go through the same folding.
+type FreeAddress struct {
+	Line1  string
+	City   string
+	State  string
+	Postal string
+}
+
+// ParseFreeAddress splits an address string on its commas.
+//
+// Commas are what a printed address uses to separate the street from the town
+// and the town from the state, and reading them is the whole of the rule. A
+// string with no commas is all street: that fold still matches on Street
+// below, which is what the matcher falls back to and why guessing where the
+// street ends is not worth doing.
+//
+// The last part is checked for a state and a ZIP because "OH 45701" is one
+// comma-separated field on every envelope.
+func ParseFreeAddress(s string) FreeAddress {
+	parts := strings.Split(s, ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	parts = slices.DeleteFunc(parts, func(p string) bool { return p == "" })
+
+	var a FreeAddress
+	if len(parts) == 0 {
+		return a
+	}
+	a.Line1 = parts[0]
+	if len(parts) == 1 {
+		return a
+	}
+
+	// The tail carries the state and the ZIP; everything between it and the
+	// street is the town, which can legitimately be more than one part.
+	a.State, a.Postal = splitRegion(parts[len(parts)-1])
+	rest := parts[1 : len(parts)-1]
+	if a.State == "" && a.Postal == "" {
+		// The last part was neither, so it is part of the town after all.
+		rest = parts[1:]
+	}
+	a.City = strings.Join(rest, " ")
+	return a
+}
+
+// splitRegion reads "OH 45701", "Ohio", or "45701" off the end of an address.
+func splitRegion(s string) (state, postal string) {
+	tokens := tokenize(s)
+	if len(tokens) > 0 && isPostal(tokens[len(tokens)-1]) {
+		postal = tokens[len(tokens)-1]
+		tokens = tokens[:len(tokens)-1]
+	}
+	joined := strings.Join(tokens, " ")
+	if joined == "" {
+		return "", postal
+	}
+	if _, named := states[joined]; named || (len(joined) == 2 && isStateCode(joined)) {
+		return joined, postal
+	}
+	// Neither a state nor a ZIP: the caller treats it as more town.
+	if postal == "" {
+		return "", ""
+	}
+	return "", postal
+}
+
+// isPostal reports whether a token is a five- or nine-digit ZIP.
+func isPostal(t string) bool {
+	if len(t) != 5 && len(t) != 9 {
+		return false
+	}
+	for _, r := range t {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isStateCode reports whether a two-letter token is one of the postal codes.
+func isStateCode(t string) bool {
+	for _, code := range states {
+		if code == t {
+			return true
+		}
+	}
+	return false
+}
+
+// Key is the full fold, to compare against properties.normalized_address.
+func (a FreeAddress) Key() string {
+	return NormalizeAddress(a.Line1, "", a.City, a.State, a.Postal)
+}
+
+// Street is the street line alone, folded.
+//
+// It is what a comparison falls back to when one side names a town and the
+// other does not — an invoice that says only "412 Elm St" is still an invoice
+// about the building at 412 Elm St, and a receipt for a house in the next
+// county is not going to share a house number and a street name with one of
+// yours.
+func (a FreeAddress) Street() string {
+	return NormalizeAddress(a.Line1, "", "", "", "")
 }
 
 // tokenize uppercases, reduces every non-alphanumeric byte to a separator, and

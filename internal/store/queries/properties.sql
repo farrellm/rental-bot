@@ -34,7 +34,8 @@ SELECT * FROM properties WHERE id = ? LIMIT 1;
 -- comparing in memory is cheaper than the index that would let the database
 -- try.
 -- name: ListPropertyMatchKeys :many
-SELECT id, nickname, normalized_address FROM properties
+SELECT id, nickname, address_line1, address_line2, normalized_address
+FROM properties
 ORDER BY id;
 
 -- name: CreateProperty :one

@@ -121,6 +121,69 @@ func (c *Client) Model() string {
 	return c.name
 }
 
+// Available reports whether a call would be allowed, without making one.
+//
+// The pipeline's sweep asks before it enqueues: queueing work that is
+// guaranteed to be refused fills the queue with jobs that spend their attempts
+// and then dead-letter, over a condition the breaker is already reporting.
+func (c *Client) Available(ctx context.Context) error {
+	if c == nil {
+		return errors.New("llm: no model is configured")
+	}
+	return c.budget.Check(ctx)
+}
+
+// Classify is stage one: what kind of document arrived, and roughly where.
+func (c *Client) Classify(ctx context.Context, in Input) (Classification, Usage, error) {
+	in.System = ClassifySystem
+	return Generate[Classification](ctx, c, in)
+}
+
+// ErrNoExtractor reports a classification this milestone reads and does not
+// take apart. A repair note or a valuation is worth filing and worth showing
+// on the review screen; there is no form to fill in for it yet.
+var ErrNoExtractor = errors.New("llm: nothing extracts that kind")
+
+// Extract is stage two: the kind's own form, filled in from the document.
+//
+// It returns `any` because the shape depends on the kind and the destination
+// is a JSON column. The generics stay on this side of the boundary, where the
+// schema is reflected off a concrete type; the caller marshals what comes back
+// and the apply path unmarshals it into the same type again.
+func (c *Client) Extract(ctx context.Context, kind string, in Input) (any, Usage, error) {
+	in.System = ExtractSystem
+	switch kind {
+	case "receipt":
+		return boxed(Generate[ReceiptExtract](ctx, c, in))
+	case "lease":
+		return boxed(Generate[LeaseExtract](ctx, c, in))
+	case "insurance":
+		return boxed(Generate[InsuranceExtract](ctx, c, in))
+	case "mortgage_statement":
+		return boxed(Generate[MortgageStatementExtract](ctx, c, in))
+	default:
+		return nil, Usage{}, fmt.Errorf("%w: %q", ErrNoExtractor, kind)
+	}
+}
+
+// boxed widens a typed result to `any` so the switch above stays one line per
+// kind.
+func boxed[T any](v T, u Usage, err error) (any, Usage, error) {
+	if err != nil {
+		return nil, u, err
+	}
+	return v, u, nil
+}
+
+// HasExtractor reports whether a classification has a form to fill in.
+func HasExtractor(kind string) bool {
+	switch kind {
+	case "receipt", "lease", "insurance", "mortgage_statement":
+		return true
+	}
+	return false
+}
+
 // Generate asks the model for one value of type T.
 //
 // It is a function rather than a method because Go has no generic methods, and

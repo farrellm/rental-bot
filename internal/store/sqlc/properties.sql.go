@@ -272,13 +272,16 @@ func (q *Queries) ListPropertiesFirstPage(ctx context.Context, limit int64) ([]L
 }
 
 const listPropertyMatchKeys = `-- name: ListPropertyMatchKeys :many
-SELECT id, nickname, normalized_address FROM properties
+SELECT id, nickname, address_line1, address_line2, normalized_address
+FROM properties
 ORDER BY id
 `
 
 type ListPropertyMatchKeysRow struct {
 	ID                int64
 	Nickname          string
+	AddressLine1      string
+	AddressLine2      string
 	NormalizedAddress string
 }
 
@@ -298,7 +301,13 @@ func (q *Queries) ListPropertyMatchKeys(ctx context.Context) ([]ListPropertyMatc
 	items := []ListPropertyMatchKeysRow{}
 	for rows.Next() {
 		var i ListPropertyMatchKeysRow
-		if err := rows.Scan(&i.ID, &i.Nickname, &i.NormalizedAddress); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Nickname,
+			&i.AddressLine1,
+			&i.AddressLine2,
+			&i.NormalizedAddress,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
