@@ -69,6 +69,41 @@ max_attachment_bytes = 26214400 # 25 MiB
 audience = ""
 service_account = ""
 
+[llm]
+# Reading what arrives. A blank provider is the off switch: mail is still
+# fetched, archived and filed, and nothing reads it — no review queue, no
+# proposals. Set it and everything below is required, along with a connected
+# mailbox, because reading mail nobody collects is a subsystem with no input.
+#
+# anthropic | openai | google. The API key goes in the environment, not here.
+provider = ""
+model = "claude-sonnet-5"
+# One call's budget of time. A scanned twelve-page lease is a slow read, and
+# the job queue's own retry covers a call that never comes back.
+timeout = "90s"
+# How many times the SDK retries a 429 or a 5xx on its own. Small on purpose —
+# the job queue retries on top of it, with backoff and a dead-letter alert.
+max_retries = 2
+# The largest enclosure that is sent to a model. Under
+# gmail.max_attachment_bytes deliberately: bytes worth keeping are not always
+# bytes worth reading, and the record a 25 MiB scan produces is the same size
+# as the one a 2 MiB scan produces.
+max_attachment_bytes = 10485760 # 10 MiB
+# A runaway-bill breaker, not a spending target. Crossing it refuses further
+# calls, raises a critical alert, and leaves the mail on file to be read on the
+# sweep once the month turns. 0 turns the cap off.
+monthly_token_budget = 2000000
+# The one exception to the review gate (docs/DESIGN.md §5.4). A receipt needs
+# all three: this on, a confidence at or above the threshold below, and an
+# unambiguous property match. Everything else waits for a person, and an
+# auto-applied entry still stays flagged until one clears it.
+auto_apply = true
+auto_apply_confidence = 0.90
+# How often mail that arrived and was never read is looked for. This is to the
+# enqueue at sync time what the Gmail poller is to the webhook: the enqueue
+# makes it fast, this makes it reliable.
+sweep_interval = "15m"
+
 [telegram]
 # The alert channel. A blank bot_username is the off switch: the process runs
 # without a bot, and the intake screen says it is not set up rather than
@@ -121,6 +156,7 @@ format = "text"
 #   RENTAL_BOT_SECRET_KEY          the AES-GCM key protecting encrypted columns
 #   RENTAL_BOT_SECRET_KEY_FILE     a path to that key; the file must be mode 0600
 #   RENTAL_BOT_GMAIL_CLIENT_SECRET the OAuth client secret
+#   RENTAL_BOT_LLM_API_KEY         the key for whichever llm.provider is set
 #   RENTAL_BOT_TELEGRAM_BOT_TOKEN  the bot token from @BotFather
 #
 # The encryption key is required once gmail.client_id is set: the refresh token
