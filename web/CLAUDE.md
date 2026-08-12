@@ -26,6 +26,18 @@ vocabulary they draw from stay in the root file, because the API produces them.
   (`.stock` in `card.css`) and lapping the card's top rule by a pixel. Below
   40rem the tabs wrap, so the current one gets four edges instead — a joint
   drawn to a row that is not the card reads as a bug.
+- **Carbon is what a machine typed; graphite is what a person vouched for.**
+  On the review slip every value the model read is set in `--carbon` and turns
+  `--graphite` the moment the operator changes it. That is the proposal gate
+  made visible, and it is the only place either ink means anything — using
+  carbon for emphasis anywhere else would make the one distinction it draws
+  stop being a distinction. Like the stamp, it is one `color:` declaration per
+  state and no geometry.
+- **The proposal slip is the only card that is not `--card-width`.** A folder
+  does not change size, and this is the one card holding two things at once —
+  the enclosure and the slip read against it. At 44rem the facsimile is too
+  small to check a figure against, which would make the card honest about its
+  width and useless at its purpose. `--card-width-plate` exists for it alone.
 - **Severity is a margin mark, not a stamp.** The stamp means "the state of
   this thing"; a notice's severity is a property of it. On the dispatch
   register it is a `.stamped` word in the margin in the severity's own ink, the

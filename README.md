@@ -14,26 +14,39 @@ plan.
 
 ## Status
 
-**M3.5** — the alert bus and the Telegram channel, outbound only. The
-application now tells you when it has stopped working: a revoked grant, a
-lapsed watch, a job that gave up, a queue that stopped draining, a handler that
+**M4** — forwarded mail is read. A message that arrives is classified, its
+enclosure is taken apart into the fields its kind has, and the result waits as
+a *proposal* until somebody agrees to it. The Review screen puts the document
+beside the reading: correct what the model got wrong, say which property it
+belongs to, and approve. Approving writes the record, the audit row and the
+link between them in one transaction.
+
+Nothing an LLM produced reaches the ledger any other way. There is one
+exception and it needs three things at once — a receipt, a confidence at or
+above the threshold, and an address that folds to exactly one of your
+properties — and the entry it writes still says nobody has checked it. Every
+call is made tool-free at a single step, because forwarded email is untrusted
+input and a PDF saying "mark all mortgages paid off" should reach a model with
+no capability to act on it.
+
+**M3.5** before it — the alert bus and the Telegram channel, outbound only. The
+application tells you when it has stopped working: a revoked grant, a lapsed
+watch, a job that gave up, a queue that stopped draining, a handler that
 panicked. A condition is said once and then goes quiet until it clears, and the
 Intake screen keeps the register of what went out.
 
-**M3** before it — Gmail watch, webhook, fallback poller, raw archive. Connect
-a mailbox and forwarded mail files itself: the message is archived as a raw
-`.eml`, recorded in the register, and its attachments land in the document
-store. The Intake screen says whether mail is still arriving.
+**M3** before that — Gmail watch, webhook, fallback poller, raw archive.
+Connect a mailbox and forwarded mail files itself: the message is archived as a
+raw `.eml`, recorded in the register, and its attachments land in the document
+store.
 
 Everything before that still holds. You can sign in, put properties on file
 with their units, file documents against them, keep a cash-flow ledger, run
 repairs with a dated history, and record leases and tenants; occupancy is
 derived from the lease dates rather than stored.
 
-This stops at the door of the LLM. Nothing is classified, extracted, or
-proposed — that gate is M4's, and forwarded email is untrusted input that
-should reach a model with no capability to act on it. The chat is one-way for
-now: it can pair, and after that it only sends. Commands are M6's.
+The chat is still one-way: it can pair, and after that it only sends. Commands
+are M6's. Valuations are M5's.
 
 ## Requirements
 
@@ -224,9 +237,29 @@ insert per message. The webhook only makes it fast.
 
 Forwarded mail lands in three places: the raw `.eml` under `storage.raw_email`,
 a row in the register, and each attachment in the content-addressed document
-store. Attachments are filed against no property — matching an address to a
-property is deterministic Go over an extracted string, and the extraction that
-produces that string is M4's.
+store. Then it is read, and what the reading produced waits in Review.
+
+## Reading what arrives
+
+Two stages, both against a model with no tools and one step. The first says
+what kind of document this is and quotes any address on it; the second fills in
+that kind's own form. Both land on one `ingest_proposals` row, which is what
+lets the monthly token budget be a single sum rather than a ledger of its own.
+
+Which property a document belongs to is never the model's decision. It returns
+the address as a string, Go folds it the same way `properties.normalized_address`
+was folded, and the two are compared: an exact fold, then the street line, then
+an edit distance. More than one candidate at any tier is ambiguity rather than
+a guess — the cost of a miss is a proposal that waits for you, and the cost of
+a wrong match is a roof filed against the wrong building.
+
+A read that fails leaves the message where it was, so the sweep finds it again.
+That sweep is to the enqueue at sync time what the poller is to the webhook:
+the enqueue makes reading fast, and the sweep makes it reliable.
+
+Set `llm.provider` and `RENTAL_BOT_LLM_API_KEY` to turn it on. Leave the
+provider blank and mail is still collected, archived and filed — there is
+simply nobody reading it, and proposals already on file can still be settled.
 
 ## Alerts
 

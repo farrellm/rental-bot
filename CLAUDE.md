@@ -8,10 +8,9 @@ pipeline, the LLM boundary, valuations, alerting, and the milestone plan. Read
 it before proposing anything structural; this file records only what the code
 does not already say.
 
-Current milestone: **M3.5 complete** (the alert bus with its cooldown, the
-Telegram channel, pairing, and the dispatch register — outbound only; inbound
-commands are M6's). Next is M4 — LLM classify/extract, `ingest_proposals`, and
-the Review inbox.
+Current milestone: **M4 complete** (classify and extract behind the proposal
+gate, the four apply paths, `audit_log`, and the Review inbox). Next is M5 —
+valuations.
 
 ## Commands
 
@@ -192,12 +191,42 @@ decision, not a refactor.
   503 naming the missing keys, and `/readyz` reports it OK — a check that fails
   over a subsystem nobody asked for is a check that teaches its reader to
   ignore it.
-- **Nothing from an LLM reaches the ledger except through `ingest_proposals`**
-  (from M4). Extraction runs tool-free with `MaxSteps: 1`, because forwarded
-  email is untrusted input.
-- **Property matching is deterministic Go** — normalize the address, compare
+- **Nothing from an LLM reaches the ledger except through `ingest_proposals`.**
+  Every call is tool-free at a single step, because forwarded email is
+  untrusted input and a PDF saying "mark all mortgages paid off" must reach a
+  model with no capability to act on it. The only thing that comes back is a
+  typed struct.
+- **Auto-apply needs all three of §5.4's conditions**, checked separately and
+  tested separately: `kind == "receipt"`, confidence at or above
+  `llm.auto_apply_confidence`, and a property matched by an *exact* fold. A
+  street-only match is a real match and a weak claim — it shows on the screen
+  and does not put money in the ledger unread. The row it writes still carries
+  `needs_review`, and `actor = 'system'` in `audit_log` is what makes those
+  findable.
+- **Property matching is deterministic Go** — fold the address, compare
   against `properties.normalized_address`. The model returns a string; it
-  never picks the property.
+  never picks the property. Three tiers (exact fold, street line, edit
+  distance), and more than one candidate within a tier is *ambiguous* rather
+  than a guess: the cost of a miss is a proposal that waits for a person, and
+  the cost of a wrong match is a roof filed against the wrong building.
+- **An apply is one transaction**: the entity, the `audit_log` row, the
+  `document_links` row, the proposal's settlement, and the message's standing.
+  A log entry without its effect is not a state this database may be in, and
+  §5.4's promise that every apply is reversible rests on that. The settlement
+  is guarded in the `UPDATE` rather than in Go, because two approvals arriving
+  together would both pass a read-then-write.
+- **`ingest.sweep` is to the enqueue at sync time what the Gmail poller is to
+  the webhook.** The enqueue makes reading fast; the sweep makes it reliable,
+  and both are free because every step reads before it writes. A read that
+  fails puts the message back to `received` so the sweep finds it again rather
+  than stranding it in a state nothing looks at.
+- **Settling a proposal does not need a model.** The gate is built whether or
+  not `llm.provider` is set; what a blank one turns off is the *reading* half.
+  A host that turned the model off still has to be able to clear its queue.
+- **The LLM budget breaker reads `ingest_proposals`** rather than a counter of
+  its own — every call lands on a row, so one sum over the month is the whole
+  spend. A read that fails lets the call through: the breaker exists to stop a
+  runaway bill, and a database blip is not one.
 - **The stamp is the app's state machine.** One component says OPERATIONAL,
   DEGRADED, NO CONTACT, ACTIVE, PROSPECT, SOLD, AMENDING, REFUSED; from M2
   OPEN, SCHEDULED, IN PROGRESS, DONE, WON'T FIX, PENDING, ENDED, TERMINATED;
@@ -209,7 +238,10 @@ decision, not a refactor.
   asked for ingestion, versus somebody did and did not finish. M3.5 adds only
   PAIRED and MUTED, for the alert channel, and reuses NOT SET UP, NOT CONNECTED
   and NO CONTACT — they are the same three claims about a different subsystem,
-  and a reader should not have to learn a second set of words for them.
+  and a reader should not have to learn a second set of words for them. M4
+  adds none at all: a proposal's four states map onto words that exist, and
+  `auto_applied` reads NEEDS REVIEW because that is the true claim about a row
+  nobody has checked. Which hand filed it is a field, not a second bold mark.
   Every variant is one `color:` declaration, because the border, inner ring,
   and divider all take `currentcolor`. It stays the only thing that moves.
 - **The dispatch register is one line per condition.** A restatement bumps the
@@ -231,10 +263,12 @@ Standard library `testing`, table-driven where there is more than one case. No
 assertion library. Store tests open a real SQLite file under `t.TempDir()`;
 `httpapi` tests substitute the small `Health` interface rather than a database.
 
-## Known gaps at M3.5
+## Known gaps at M4
 
-- **`audit_log` is still not written.** §8.5 implies web mutations are audited,
-  but the table is in no migration and §11 assigns it to no milestone.
+- **`audit_log` is written by the apply path and nothing else.** §8.5 implies
+  every web mutation is audited; M4 landed the table because it is the first
+  thing that writes to the ledger on a machine's word, and editing a property
+  by hand still records nothing.
 - **Orphaned blobs are never reclaimed.** Deleting a document removes the row
   and its links and leaves the bytes: a digest is the only name content has,
   and a restore should still find the file. A sweep belongs with M7's backup
@@ -243,22 +277,27 @@ assertion library. Store tests open a real SQLite file under `t.TempDir()`;
   reason to exist. Backfilling it over the documents on file is one
   `INSERT … SELECT`.
 - **`document_links.entity_type` carries a CHECK over the entities that exist
-  at M2.** Widening it for a later milestone's entity means rebuilding the
-  table, which is the price of a typo'd type failing loudly instead of
-  silently orphaning a link.
-- **`transactions.proposal_id` is still absent**, for the reason
-  `documents.source_message_id` was until M3 added it: with `foreign_keys=ON` a
-  reference to a table that does not exist yet fails at INSERT rather than at
-  CREATE, so the milestone that creates the target adds the column with its
-  constraint. M4 adds this one.
-- **An ingested attachment is filed against no property.** Matching an address
-  to a property is deterministic Go over an extracted string, and the
-  extraction that produces that string is M4's. The bytes are on file and the
-  association is not; that split is the point of the content-addressed store.
+  at M4.** 0005 rebuilt the table to reach three more; widening it again for a
+  later milestone's entity means rebuilding it again, which is the price of a
+  typo'd type failing loudly instead of silently orphaning a link.
 - **`gmail.send` is in the requested scopes and nothing uses it.** §4.2 step 7
-  replies in-thread once ingestion resolves, which needs M4's proposal to have
-  resolved into something. Asking for the scope now means the operator consents
-  once instead of being sent back through a consent screen by an upgrade.
+  replies in-thread once ingestion resolves. M4 makes a proposal resolve into
+  something and deliberately stops short of the reply; it is a separable job
+  kind. Asking for the scope now means the operator consents once instead of
+  being sent back through a consent screen by an upgrade.
+- **Insurance policies and mortgages can only be created by an apply.** The
+  tables, the read endpoints and the two tabs landed with M4 because an
+  extract with nowhere to go is a classification into a dead end. Entering or
+  amending one by hand arrives with the milestone that needs it; correcting the
+  figures on the review slip before approving is the only way in today.
+- **A repair, valuation or note classification gets a proposal and no form.**
+  All eight of §5.1's kinds are on file, four have an extractor, and the other
+  four reach the queue saying what they are with the enclosure attached. That
+  is the right order — a screen that can show a state should exist before
+  anything writes it.
+- **An extraction is never replayed.** The model name and the token counts are
+  on every proposal so a reading can be compared against a later model's, and
+  nothing does the comparing. §5.3 asks for the provenance, not for the tool.
 - **A dead-lettered job now alerts but still nothing retries it.** A job past
   `max_attempts` is `failed`, the row stays as the record, and
   `RunnerOptions.OnDeadLetter` gives it a voice. Requeueing one is still a
@@ -286,10 +325,10 @@ assertion library. Store tests open a real SQLite file under `t.TempDir()`;
   per channel, which is slow, but it is unbounded.
 - Migrations land only the tables a milestone touches. The rest of
   `docs/DESIGN.md` §3 arrives milestone by milestone.
-- Property detail has five of §7.2's eight tabs. Insurance, Mortgage, and Value
-  arrive with the milestones that fill them. §7.2's Settings screen is now the
-  Intake screen for its Gmail half and its Telegram half; provider health and
-  backup status join it at M5 and M7.
+- Property detail has seven of §7.2's eight tabs. Value arrives with M5.
+  §7.2's Settings screen is now the Intake screen for its Gmail half and its
+  Telegram half; provider health and backup status join it at M5 and M7.
 - **List pagination works but nothing pages yet** — every index fetches one
-  page and the frontend ignores `next_cursor`, the dispatch register included.
-  It matters past 50 properties, or a property with a long ledger.
+  page and the frontend ignores `next_cursor`, the review queue and the
+  dispatch register included. It matters past 50 properties, a property with a
+  long ledger, or a backlog nobody has cleared in a month.
