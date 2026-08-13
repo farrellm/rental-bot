@@ -366,10 +366,11 @@ here:
 | Path | Purpose |
 | --- | --- |
 | `GET /api/v1/review` | What is waiting, newest first, with each line's message facts and the queue's tally. `?status=all` to see what has already been decided. |
-| `GET /api/v1/review/{id}` | One proposal: the extraction, the enclosures to render beside it, the matched property and why, and the portfolio to correct the match with. |
+| `GET /api/v1/review/{id}` | One proposal: the extraction, the enclosures to render beside it, the matched property and why, and the portfolio to correct the match with. Carries a suggested new property when the document named an address nothing on file folds to. |
 | `PATCH /api/v1/review/{id}` | Corrects what was read, before anybody agrees to it. Refused once the proposal is settled — from then on the record it produced is the thing to amend. |
 | `POST /api/v1/review/{id}/approve` | Files it: the entity, the audit row, the document link, and the message's standing, in one transaction. `409` with the reason when it cannot be filed as things stand. |
 | `POST /api/v1/review/{id}/reject` | Records that somebody looked and said no. The row stays. |
+| `POST /api/v1/review/{id}/property` | Opens a record for a building the portfolio does not hold and files this proposal against it — the property, its implicit `Main` unit, and the retarget, in one transaction. |
 | `GET /api/v1/properties/{id}/insurance`, `.../mortgage` | The policies and mortgages an applied proposal wrote. Read-only at M4; the mortgage carries its statements inline, and neither ever puts a policy or loan number on the wire. |
 
 Alerts and the Telegram channel:

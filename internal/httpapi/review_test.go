@@ -373,6 +373,183 @@ func TestApprovingWithNoPropertyIsRefusedWithAReason(t *testing.T) {
 	}
 }
 
+// A receipt for a building nobody has entered yet. The address guess is what
+// the model read off the document, and it beats the covering email's hint.
+const sycamoreReceipt = `{"vendor_name":"Ace Roofing","date_iso":"2026-08-04","total_cents":124500,` +
+	`"category":"repair","address_guess":"9 Sycamore Ln, Nelsonville, OH 45764"}`
+
+// The refusal above is a dead end unless the slip says what to do about it.
+func TestASlipOffersTheRecordTheMatcherCouldNotFind(t *testing.T) {
+	d := newDesk(t)
+	proposal := d.seed("gmail-sycamore", "receipt", sycamoreReceipt, nil)
+
+	var out proposalDetail
+	d.decode(d.do(http.MethodGet, reviewPath(proposal.ID), nil), http.StatusOK, &out)
+
+	if out.PropertySuggestion == nil {
+		t.Fatal("no suggestion, so the operator is sent away to retype an address already on the page")
+	}
+	want := propertySuggestion{
+		Nickname: "9 Sycamore Ln", AddressLine1: "9 Sycamore Ln",
+		City: "Nelsonville", State: "OH", PostalCode: "45764",
+		Source: "9 Sycamore Ln, Nelsonville, OH 45764",
+	}
+	if *out.PropertySuggestion != want {
+		t.Errorf("suggestion = %+v, want %+v", *out.PropertySuggestion, want)
+	}
+}
+
+func TestASlipSuggestsNothingWhenThereIsNothingMissing(t *testing.T) {
+	d := newDesk(t)
+	property := d.property.ID
+
+	tests := []struct {
+		name    string
+		gmailID string
+		payload string
+		match   *int64
+		settle  string
+	}{
+		{
+			name: "the proposal is already matched", gmailID: "gmail-matched",
+			payload: sycamoreReceipt, match: &property,
+		},
+		{
+			// The hint folds to Elm Street, which is on file. The operator has
+			// a picker; a second record for the same roof is the wrong fix.
+			name: "the address names a property that exists", gmailID: "gmail-onfile",
+			payload: homeDepotReceipt,
+		},
+		{
+			// Rejected is a decision. There is nothing left to file, so there
+			// is nothing to open a record for.
+			name: "the proposal has been settled", gmailID: "gmail-settled",
+			payload: sycamoreReceipt, settle: "/reject",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proposal := d.seed(tt.gmailID, "receipt", tt.payload, tt.match)
+			if tt.settle != "" {
+				d.decode(d.do(http.MethodPost, reviewPath(proposal.ID)+tt.settle, nil), http.StatusOK, nil)
+			}
+
+			var out proposalDetail
+			d.decode(d.do(http.MethodGet, reviewPath(proposal.ID), nil), http.StatusOK, &out)
+			if out.PropertySuggestion != nil {
+				t.Errorf("suggestion = %+v, want none", *out.PropertySuggestion)
+			}
+		})
+	}
+}
+
+// The whole point: the record opens, the proposal attaches to it, and the
+// approve that was refused a moment ago now goes through.
+func TestOpeningARecordFromASlipFilesTheProposalAgainstIt(t *testing.T) {
+	d := newDesk(t)
+	proposal := d.seed("gmail-open", "receipt", sycamoreReceipt, nil)
+
+	if rec := d.do(http.MethodPost, reviewPath(proposal.ID)+"/approve", nil); rec.Code != http.StatusConflict {
+		t.Fatalf("approve before the record exists = %d, want 409", rec.Code)
+	}
+
+	rec := d.do(http.MethodPost, reviewPath(proposal.ID)+"/property", map[string]any{
+		"nickname": "Sycamore cottage", "address_line1": "9 Sycamore Ln",
+		"city": "Nelsonville", "state": "OH", "postal_code": "45764",
+	})
+	var attached proposalResponse
+	d.decode(rec, http.StatusCreated, &attached)
+
+	if attached.PropertyID == nil {
+		t.Fatal("the proposal is still unmatched, so the press did nothing the operator asked for")
+	}
+	if got := rec.Header().Get("Location"); got != "/api/v1/properties/"+itoa(*attached.PropertyID) {
+		t.Errorf("Location = %q, want the property that was created", got)
+	}
+
+	var created propertyDetail
+	d.decode(d.do(http.MethodGet, "/api/v1/properties/"+itoa(*attached.PropertyID), nil),
+		http.StatusOK, &created)
+	if created.Nickname != "Sycamore cottage" || created.Status != "active" {
+		t.Errorf("property = %+v, want the one that was typed", created)
+	}
+	// Derived, never accepted: the fold is what the next document matches on.
+	if want := domain.NormalizeAddress("9 Sycamore Ln", "", "Nelsonville", "OH", "45764"); created.NormalizedAddress != want {
+		t.Errorf("normalized_address = %q, want %q", created.NormalizedAddress, want)
+	}
+	if len(created.Units) != 1 || created.Units[0].Label != "Main" {
+		t.Fatalf("units = %+v, want the implicit one", created.Units)
+	}
+
+	var filed proposalResponse
+	d.decode(d.do(http.MethodPost, reviewPath(proposal.ID)+"/approve", nil), http.StatusOK, &filed)
+	if filed.Status != "approved" || filed.AppliedEntityType == nil || *filed.AppliedEntityType != "transaction" {
+		t.Fatalf("proposal = %+v, want it filed as a transaction", filed)
+	}
+}
+
+func TestOpeningARecordRefusesWhatItCannotDo(t *testing.T) {
+	tests := []struct {
+		name    string
+		gmailID string
+		match   bool
+		settle  bool
+		body    map[string]any
+	}{
+		{
+			name: "a proposal that has been settled", gmailID: "gmail-refuse-settled", settle: true,
+			body: map[string]any{"nickname": "Sycamore cottage", "address_line1": "9 Sycamore Ln"},
+		},
+		{
+			name: "a proposal that already has a property", gmailID: "gmail-refuse-matched", match: true,
+			body: map[string]any{"nickname": "Sycamore cottage", "address_line1": "9 Sycamore Ln"},
+		},
+		{
+			name: "a record with no name", gmailID: "gmail-refuse-noname",
+			body: map[string]any{"nickname": "  ", "address_line1": "9 Sycamore Ln"},
+		},
+		{
+			name: "a record with no address", gmailID: "gmail-refuse-noaddr",
+			body: map[string]any{"nickname": "Sycamore cottage", "address_line1": ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := newDesk(t)
+			var match *int64
+			if tt.match {
+				match = &d.property.ID
+			}
+			proposal := d.seed(tt.gmailID, "receipt", sycamoreReceipt, match)
+			if tt.settle {
+				d.decode(d.do(http.MethodPost, reviewPath(proposal.ID)+"/reject", nil), http.StatusOK, nil)
+			}
+
+			rec := d.do(http.MethodPost, reviewPath(proposal.ID)+"/property", tt.body)
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status = %d, want 422 (body %s)", rec.Code, rec.Body)
+			}
+
+			var problem Problem
+			if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil {
+				t.Fatalf("decode problem: %v", err)
+			}
+			if problem.Detail == "" {
+				t.Error("the refusal says nothing, so the operator does not know what to fix")
+			}
+
+			// Nothing is half-done: no property, and the proposal is as it was.
+			var portfolio propertyList
+			d.decode(d.do(http.MethodGet, "/api/v1/properties", nil), http.StatusOK, &portfolio)
+			if len(portfolio.Items) != 1 {
+				t.Errorf("portfolio = %d properties, want only the seeded one", len(portfolio.Items))
+			}
+		})
+	}
+}
+
 // Rejecting keeps the row and moves the message with it.
 func TestRejectingAProposal(t *testing.T) {
 	d := newDesk(t)
@@ -403,6 +580,7 @@ func TestReviewRoutesNeedASession(t *testing.T) {
 		{http.MethodPatch, "/api/v1/review/1"},
 		{http.MethodPost, "/api/v1/review/1/approve"},
 		{http.MethodPost, "/api/v1/review/1/reject"},
+		{http.MethodPost, "/api/v1/review/1/property"},
 		{http.MethodGet, "/api/v1/properties/1/insurance"},
 		{http.MethodGet, "/api/v1/properties/1/mortgage"},
 	}
@@ -424,6 +602,7 @@ func TestReviewMutationsNeedACSRFToken(t *testing.T) {
 	for _, target := range []string{
 		reviewPath(proposal.ID) + "/approve",
 		reviewPath(proposal.ID) + "/reject",
+		reviewPath(proposal.ID) + "/property",
 	} {
 		req := d.request(http.MethodPost, target, nil)
 		req.Header.Del("X-CSRF-Token")

@@ -209,6 +209,16 @@ decision, not a refactor.
   distance), and more than one candidate within a tier is *ambiguous* rather
   than a guess: the cost of a miss is a proposal that waits for a person, and
   the cost of a wrong match is a roof filed against the wrong building.
+- **A slip that matched nothing offers the record it could not find**, and
+  only on `unmatched`. `ambiguous` means two buildings fit, where the answer
+  is to pick one rather than to grow a third, and `none` has nothing to type
+  up. The verdict is recomputed in the read for the reason extract.go
+  recomputes it, so there is still no stored outcome. `POST
+  /api/v1/review/{id}/property` is one transaction — property, implicit unit,
+  retarget — because a property created with the proposal left unmatched is
+  the state the operator pressed the button to get out of. It writes no
+  `audit_log` row: every field is read off the slip and confirmed first, which
+  makes it hand entry with a head start.
 - **An apply is one transaction**: the entity, the `audit_log` row, the
   `document_links` row, the proposal's settlement, and the message's standing.
   A log entry without its effect is not a state this database may be in, and

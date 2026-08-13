@@ -9,6 +9,7 @@ import type {
   Proposal,
   ProposalDetail,
   ProposalPage,
+  ProposalPropertyWrite,
   ProposalWrite,
 } from "./types";
 
@@ -42,6 +43,24 @@ export function useUpdateProposal(id: number): UseMutationResult<Proposal, Error
   return useInvalidating(
     (body: ProposalWrite) => request<Proposal>(`/api/v1/review/${id}`, { method: "PATCH", body }),
     [keys.proposal(id), keys.allReview],
+  );
+}
+
+/**
+ * Opens a record for a building the portfolio does not hold, and files this
+ * proposal against it.
+ *
+ * One call, because the two halves are one act. The portfolio is invalidated
+ * along with the slip: the picker on this screen is the portfolio, and so is
+ * the drawer the operator lands in next.
+ */
+export function useCreatePropertyForProposal(
+  id: number,
+): UseMutationResult<Proposal, Error, ProposalPropertyWrite> {
+  return useInvalidating(
+    (body: ProposalPropertyWrite) =>
+      request<Proposal>(`/api/v1/review/${id}/property`, { method: "POST", body }),
+    [keys.proposal(id), keys.allReview, keys.properties],
   );
 }
 

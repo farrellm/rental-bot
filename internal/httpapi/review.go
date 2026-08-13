@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/farrellm/rental-bot/internal/domain"
@@ -91,6 +92,28 @@ type proposalDetail struct {
 	Enclosures []proposalEnclosure    `json:"enclosures"`
 	Property   *propertyResponse      `json:"property"`
 	Properties []proposalPropertyName `json:"properties"`
+	// PropertySuggestion is the record the matcher could not find, typed up
+	// from what the document said. Null unless this is a pending proposal
+	// naming an address no property on file folds to.
+	PropertySuggestion *propertySuggestion `json:"property_suggestion"`
+}
+
+// propertySuggestion is a draft of a property, for the one row on this slip
+// that can block a filing outright.
+//
+// It is the create endpoint's fields and nothing else: everything a document
+// says about a building is its address, and the rest of a record -- what it
+// cost, when it was bought, how many bedrooms -- is not on a roofing invoice
+// and should not be guessed at on one.
+type propertySuggestion struct {
+	Nickname     string `json:"nickname"`
+	AddressLine1 string `json:"address_line1"`
+	City         string `json:"city"`
+	State        string `json:"state"`
+	PostalCode   string `json:"postal_code"`
+	// Source is the address string this was read off, verbatim, so the screen
+	// can say what it is offering to create and why.
+	Source string `json:"source"`
 }
 
 // proposalEnclosure is one attachment, as something to look at.
@@ -150,6 +173,9 @@ func (s *server) routeReview(mux *http.ServeMux) {
 	})
 	route(mux, "/api/v1/review/{id}/reject", methods{
 		http.MethodPost: s.guarded(s.handleRejectProposal),
+	})
+	route(mux, "/api/v1/review/{id}/property", methods{
+		http.MethodPost: s.guarded(s.handleCreateProposalProperty),
 	})
 }
 
@@ -321,6 +347,24 @@ func (s *server) handleGetProposal(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// A proposal matched to nothing cannot be filed at all, so the screen is
+	// offered the record that would fix it. One gate, here: a settled proposal
+	// has no use for a suggestion, and a matched one is not missing anything.
+	// The candidates are already in hand for the picker, so this costs no
+	// query.
+	if proposal.Status == "pending" && proposal.PropertyID == nil {
+		if s := ingest.SuggestProperty(keys, proposal.Payload, proposal.PropertyHint); s != nil {
+			out.PropertySuggestion = &propertySuggestion{
+				Nickname:     s.Nickname,
+				AddressLine1: s.AddressLine1,
+				City:         s.City,
+				State:        s.State,
+				PostalCode:   s.PostalCode,
+				Source:       s.Source,
+			}
+		}
+	}
+
 	writeJSON(w, r, http.StatusOK, out)
 }
 
@@ -399,6 +443,121 @@ func (s *server) handleUpdateProposal(w http.ResponseWriter, r *http.Request) {
 var proposalKinds = []string{
 	"receipt", "lease", "insurance", "mortgage_statement",
 	"repair", "valuation", "note", "unknown",
+}
+
+// proposalPropertyRequest is a new record, off the slip that needed it.
+//
+// The address fields and the nickname, and no more: the create endpoint takes
+// fifteen, and fourteen of them are things a document does not say. The rest
+// of the record is filled in on the record.
+type proposalPropertyRequest struct {
+	Nickname     string `json:"nickname"`
+	AddressLine1 string `json:"address_line1"`
+	City         string `json:"city"`
+	State        string `json:"state"`
+	PostalCode   string `json:"postal_code"`
+}
+
+// handleCreateProposalProperty opens a record for a building the portfolio
+// does not hold, and files this proposal against it.
+//
+// One transaction, because the two halves are one act. A property created and
+// a proposal left unmatched is the state the operator was already in, and
+// having pressed the button that was supposed to fix it is worse than not
+// having pressed anything.
+//
+// No audit_log row. Every field here is read by a person off the slip and
+// confirmed before the press, which makes this hand entry with a head start
+// rather than a machine writing to the record. Auditing the web's own
+// mutations is a gap the whole application shares and should close in one
+// place.
+func (s *server) handleCreateProposalProperty(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var req proposalPropertyRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+
+	req.Nickname = strings.TrimSpace(req.Nickname)
+	req.AddressLine1 = strings.TrimSpace(req.AddressLine1)
+
+	// The same rules the create endpoint applies, from the same function. A
+	// property entered this way is a property. Active, because a building
+	// sending you invoices is one you hold; the record can say otherwise.
+	if detail := validateProperty(req.Nickname, req.AddressLine1, "active",
+		nil, nil, nil, nil, nil); detail != "" {
+		WriteProblem(w, r, http.StatusUnprocessableEntity, detail)
+		return
+	}
+
+	ctx := r.Context()
+	now := timestamp()
+
+	var created sqlc.Property
+	var updated sqlc.IngestProposal
+
+	err := s.repo.Tx(ctx, func(q *sqlc.Queries) error {
+		current, err := q.GetProposal(ctx, id)
+		if err != nil {
+			return err
+		}
+		if current.Status != "pending" {
+			return validationError{"This proposal has already been settled, so its record is the thing to amend."}
+		}
+		if current.PropertyID != nil {
+			return validationError{"This proposal is already filed against a property, so the picker is what changes it."}
+		}
+
+		created, err = q.CreateProperty(ctx, sqlc.CreatePropertyParams{
+			Nickname:     req.Nickname,
+			AddressLine1: req.AddressLine1,
+			City:         req.City,
+			State:        req.State,
+			PostalCode:   req.PostalCode,
+			// Derived here, as everywhere: a match key a client could set is a
+			// match key that can disagree with the address it names.
+			NormalizedAddress: domain.NormalizeAddress(
+				req.AddressLine1, "", req.City, req.State, req.PostalCode),
+			Status:    "active",
+			CreatedAt: now,
+			UpdatedAt: now,
+		})
+		if err != nil {
+			return err
+		}
+
+		// Every property keeps at least one unit, and this one has nobody to
+		// name it, so it gets the implicit one the create endpoint gives.
+		if _, err := q.CreateUnit(ctx, sqlc.CreateUnitParams{
+			PropertyID: created.ID,
+			Label:      implicitUnitLabel,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}); err != nil {
+			return err
+		}
+
+		updated, err = q.UpdateProposal(ctx, sqlc.UpdateProposalParams{
+			Kind:       current.Kind,
+			Payload:    current.Payload,
+			PropertyID: &created.ID,
+			UpdatedAt:  now,
+			ID:         id,
+		})
+		return err
+	})
+	if err != nil {
+		s.writeError(w, r, recProposal, err)
+		return
+	}
+
+	// The thing created is a property, and the header says where it lives. The
+	// body is the proposal, because that is the screen the operator is on.
+	w.Header().Set("Location", "/api/v1/properties/"+strconv.FormatInt(created.ID, 10))
+	writeJSON(w, r, http.StatusCreated, newProposalResponse(updated))
 }
 
 func (s *server) handleApproveProposal(w http.ResponseWriter, r *http.Request) {
