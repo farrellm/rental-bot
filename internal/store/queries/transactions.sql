@@ -59,17 +59,19 @@ WHERE property_id = sqlc.arg(property_id)
 -- name: GetTransaction :one
 SELECT * FROM transactions WHERE id = ? LIMIT 1;
 
+-- proposal_id is set only by the apply path; a manual entry passes NULL. It is
+-- the forward half of the provenance the audit log keeps backward.
 -- name: CreateTransaction :one
 INSERT INTO transactions (
     property_id, occurred_on, amount_cents, category, description,
     counterparty, payment_method, unit_id, lease_id, repair_id,
     vendor_id, document_id, source, confidence, needs_review,
-    created_at, updated_at
+    proposal_id, created_at, updated_at
 ) VALUES (
     ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?,
-    ?, ?
+    ?, ?, ?
 )
 RETURNING *;
 

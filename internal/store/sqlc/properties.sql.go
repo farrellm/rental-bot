@@ -271,6 +271,56 @@ func (q *Queries) ListPropertiesFirstPage(ctx context.Context, limit int64) ([]L
 	return items, nil
 }
 
+const listPropertyMatchKeys = `-- name: ListPropertyMatchKeys :many
+SELECT id, nickname, address_line1, address_line2, normalized_address
+FROM properties
+ORDER BY id
+`
+
+type ListPropertyMatchKeysRow struct {
+	ID                int64
+	Nickname          string
+	AddressLine1      string
+	AddressLine2      string
+	NormalizedAddress string
+}
+
+// Everything the property matcher needs and nothing else.
+//
+// The comparison is deterministic Go over the folded address (docs/DESIGN.md
+// section 5.3), not SQL, because "close enough" is an edit distance and SQLite
+// cannot spell one. The portfolio is tens of rows, so loading all of them and
+// comparing in memory is cheaper than the index that would let the database
+// try.
+func (q *Queries) ListPropertyMatchKeys(ctx context.Context) ([]ListPropertyMatchKeysRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPropertyMatchKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPropertyMatchKeysRow{}
+	for rows.Next() {
+		var i ListPropertyMatchKeysRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Nickname,
+			&i.AddressLine1,
+			&i.AddressLine2,
+			&i.NormalizedAddress,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateProperty = `-- name: UpdateProperty :one
 UPDATE properties SET
     nickname             = ?,

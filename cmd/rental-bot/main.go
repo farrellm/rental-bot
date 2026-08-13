@@ -22,7 +22,9 @@ import (
 	"github.com/farrellm/rental-bot/internal/domain"
 	"github.com/farrellm/rental-bot/internal/gmail"
 	"github.com/farrellm/rental-bot/internal/httpapi"
+	"github.com/farrellm/rental-bot/internal/ingest"
 	"github.com/farrellm/rental-bot/internal/jobs"
+	"github.com/farrellm/rental-bot/internal/llm"
 	"github.com/farrellm/rental-bot/internal/scheduler"
 	"github.com/farrellm/rental-bot/internal/secret"
 	"github.com/farrellm/rental-bot/internal/store"
@@ -121,10 +123,27 @@ func run(m modes) error {
 
 	bg := wireBackground(cfg, repo, logger)
 
+	// The key protecting the encrypted columns, where there is one. It is
+	// required once ingestion is configured and optional otherwise, which
+	// config.Validate has already decided; a nil box here means no host asked
+	// for anything that needs one.
+	box, err := openSecrets(cfg)
+	if err != nil {
+		return err
+	}
+
+	// The proposal gate exists whether or not a model does. Settling a reading
+	// that is already on file does not need the thing that made it, and a host
+	// that turned the model off should still be able to clear its queue.
+	pipeline, err := wireIngest(cfg, repo, blobs, box, bg, logger)
+	if err != nil {
+		return err
+	}
+
 	// Ingestion is optional. A fresh clone has no Google project, and the whole
 	// subsystem stays unbuilt rather than being built and left to fail: no
 	// handlers, no scheduled polls, and a screen that says it is not configured.
-	ingestion, err := wireIngestion(cfg, repo, blobs, bg.runner, bg.ticker, logger)
+	ingestion, err := wireIngestion(cfg, repo, blobs, box, pipeline, bg, logger)
 	if err != nil {
 		return err
 	}
@@ -152,6 +171,7 @@ func run(m modes) error {
 		Archive:      ingestion.archive,
 		PushVerifier: ingestion.verifier,
 		Alerts:       bg.bus,
+		Ingest:       pipeline,
 		Telegram:     channel.store,
 		Limiter:      auth.NewLimiter(),
 		Logger:       logger,
@@ -169,6 +189,7 @@ func run(m modes) error {
 		"spa_embedded", web.Embedded,
 		"workers", cfg.Jobs.Workers,
 		"gmail", cfg.Gmail.Enabled(),
+		"llm", cfg.LLM.Enabled(),
 		"telegram", cfg.Telegram.Enabled(),
 	)
 
@@ -406,6 +427,23 @@ type ingestion struct {
 	verifier *gmail.Verifier
 }
 
+// openSecrets builds the box protecting the encrypted columns, or reports that
+// there is nothing to protect them with.
+//
+// A host with no key and nothing that needs one is a working host: that is a
+// fresh clone, and config.Validate is what refuses a key-less setup that does
+// need one.
+func openSecrets(cfg config.Config) (*secret.Box, error) {
+	if len(cfg.Secrets.Key) == 0 {
+		return nil, nil
+	}
+	box, err := secret.New(cfg.Secrets.Key)
+	if err != nil {
+		return nil, fmt.Errorf("the encryption key is unusable: %w", err)
+	}
+	return box, nil
+}
+
 // wireIngestion builds the Gmail subsystem, or nothing at all.
 //
 // A blank gmail.client_id builds none of it. That is a working state and the
@@ -415,20 +453,20 @@ func wireIngestion(
 	cfg config.Config,
 	repo *store.Repo,
 	blobs *blob.Store,
-	runner *jobs.Runner,
-	ticker *scheduler.Scheduler,
+	box *secret.Box,
+	pipeline *ingest.Pipeline,
+	bg background,
 	logger *slog.Logger,
 ) (ingestion, error) {
 	if !cfg.Gmail.Enabled() {
 		logger.Info("email ingestion is not configured; set gmail.client_id to enable it")
 		return ingestion{}, nil
 	}
+	runner, ticker := bg.runner, bg.ticker
 
-	// config.Validate has already refused an ingestion setup without a key, so
-	// this failing means the key itself is unusable.
-	box, err := secret.New(cfg.Secrets.Key)
-	if err != nil {
-		return ingestion{}, fmt.Errorf("email ingestion needs the encryption key: %w", err)
+	// config.Validate has already refused an ingestion setup without a key.
+	if box == nil {
+		return ingestion{}, errors.New("email ingestion needs the encryption key")
 	}
 	archive, err := gmail.NewArchive(cfg.Storage.RawEmail)
 	if err != nil {
@@ -439,6 +477,20 @@ func wireIngestion(
 	syncer := gmail.NewSyncer(tokens, repo, blobs, archive, cfg.Gmail, logger)
 	watcher := gmail.NewWatcher(tokens, cfg.Gmail.Topic)
 	gmail.Register(runner, syncer, watcher, logger)
+
+	// A mailbox with no model behind it still collects, archives and files;
+	// there is simply nobody listening for what lands.
+	if pipeline.Reads() {
+		syncer.OnFiled(func(ctx context.Context, messageID int64) {
+			if err := pipeline.EnqueueClassify(ctx, messageID); err != nil {
+				// Not fatal to the sync. The message is on disk and the sweep
+				// is what covers an enqueue that did not happen -- the same
+				// division the poller and the webhook already have.
+				logger.Error("could not queue a message for reading",
+					"email_message_id", messageID, "error", err)
+			}
+		})
+	}
 
 	// The verifier is built even when the Pub/Sub half is unconfigured. It
 	// refuses everything in that state, which is what the webhook should do
@@ -471,6 +523,69 @@ func wireIngestion(
 		"push", verifier.Configured(),
 	)
 	return ingestion{tokens: tokens, archive: archive, verifier: verifier}, nil
+}
+
+// wireIngest builds the proposal gate, with a model behind it or without one.
+//
+// The gate itself is not optional: it owns the apply path, and a proposal on
+// file has to be settleable on a host whose llm.provider has since been
+// blanked. What a blank llm.provider builds none of is the *reading* half --
+// no classify handler, no extract handler, no sweep, and a syncer with nobody
+// listening. That is the state a fresh clone is in and it has to be a working
+// one, the same way a blank gmail.client_id builds no mailbox.
+func wireIngest(
+	cfg config.Config,
+	repo *store.Repo,
+	blobs *blob.Store,
+	box *secret.Box,
+	bg background,
+	logger *slog.Logger,
+) (*ingest.Pipeline, error) {
+	opts := ingest.Options{
+		Repo:   repo,
+		Blobs:  blobs,
+		Queue:  bg.queue,
+		Notify: bg.runner.Notify,
+		Box:    box,
+		Config: cfg.LLM,
+		Alerts: bg.bus,
+		Logger: logger,
+	}
+
+	if !cfg.LLM.Enabled() {
+		logger.Info("forwarded mail will be filed but not read; set llm.provider to enable it")
+		return ingest.New(opts), nil
+	}
+
+	client, err := llm.New(cfg.LLM, cfg.Secrets.LLMAPIKey)
+	if err != nil {
+		return nil, err
+	}
+	// The breaker reads ingest_proposals, so it needs the repository and
+	// nothing else. A budget of zero returns a nil one, which spends freely.
+	opts.Reader = client.WithBudget(llm.NewBudget(repo, cfg.LLM.MonthlyTokenBudget, bg.bus, logger))
+
+	pipeline := ingest.New(opts)
+	ingest.Register(bg.runner, pipeline, logger)
+
+	// The sweep is to the enqueue at sync time what the Gmail poller is to the
+	// webhook: the enqueue makes reading fast, this makes it reliable. At start
+	// as well as on the tick, because a process that has been down has mail
+	// waiting and should not wait a quarter of an hour to find that out.
+	bg.ticker.Add(scheduler.Task{
+		Name:    ingest.KindSweep,
+		Kind:    ingest.KindSweep,
+		Every:   cfg.LLM.SweepInterval.Duration,
+		AtStart: true,
+	})
+
+	logger.Info("forwarded mail will be read",
+		"provider", cfg.LLM.Provider,
+		"model", cfg.LLM.Model,
+		"auto_apply", cfg.LLM.AutoApply,
+		"monthly_token_budget", cfg.LLM.MonthlyTokenBudget,
+	)
+	return pipeline, nil
 }
 
 // channel is what the rest of the process needs from the Telegram subsystem.

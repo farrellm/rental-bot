@@ -21,4 +21,5 @@ export * from "./repairs";
 export * from "./tenancy";
 export * from "./vendors";
 export * from "./intake";
+export * from "./review";
 export * from "./dispatch";

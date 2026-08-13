@@ -10,6 +10,10 @@ import { Documents } from "./screens/property/Documents";
 import { Leases } from "./screens/property/Leases";
 import { Repairs } from "./screens/property/Repairs";
 import { Intake } from "./screens/Intake";
+import { Insurance } from "./screens/property/Insurance";
+import { Mortgage } from "./screens/property/Mortgage";
+import { Review } from "./screens/Review";
+import { ReviewSlip } from "./screens/ReviewSlip";
 import { Service } from "./screens/Service";
 import { SignIn } from "./screens/SignIn";
 
@@ -64,7 +68,14 @@ export function AppRoutes() {
           <Route path="repairs" element={<Repairs />} />
           <Route path="leases" element={<Leases />} />
           <Route path="documents" element={<Documents />} />
+          <Route path="insurance" element={<Insurance />} />
+          <Route path="mortgage" element={<Mortgage />} />
         </Route>
+        {/* The register and the slip are separate routes rather than a rail
+            beside a list: a proposal is a document and a form read against each
+            other, and that needs the whole card. */}
+        <Route path="/review" element={<Review />} />
+        <Route path="/review/:id" element={<ReviewSlip />} />
         <Route path="/intake" element={<Intake />} />
         <Route path="/service" element={<Service />} />
         <Route path="/" element={<Navigate to="/properties" replace />} />

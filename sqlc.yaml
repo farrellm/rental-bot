@@ -62,3 +62,71 @@ sql:
               import: "github.com/farrellm/rental-bot/internal/domain"
               type: "Money"
               pointer: true
+          # M4's tables. Every one of these is nullable, because a declaration
+          # page that does not state a deductible and one that states zero are
+          # different claims and the record keeps them apart.
+          - column: "insurance_policies.annual_premium_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "insurance_policies.dwelling_coverage_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "insurance_policies.liability_coverage_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "insurance_policies.deductible_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "mortgages.original_principal_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "mortgages.monthly_pi_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "mortgages.escrow_monthly_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "mortgages.current_balance_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "mortgage_statements.principal_balance_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "mortgage_statements.payment_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "mortgage_statements.principal_paid_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "mortgage_statements.interest_paid_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true
+          - column: "mortgage_statements.escrow_paid_cents"
+            go_type:
+              import: "github.com/farrellm/rental-bot/internal/domain"
+              type: "Money"
+              pointer: true

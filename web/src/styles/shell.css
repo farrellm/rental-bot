@@ -191,3 +191,14 @@
   text-transform: uppercase;
   color: rgb(232 226 210 / 0.4);
 }
+
+/* What is waiting, beside the Review link.
+ *
+ * Not a badge: a badge is a filled shape, and nothing in this application is
+ * one. It is the count set beside the word, the way a clerk writes a number in
+ * the margin of a drawer label. */
+.shell__count {
+  margin-left: 0.4rem;
+  font-size: var(--size-micro);
+  color: var(--amber);
+}

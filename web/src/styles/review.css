@@ -1,0 +1,356 @@
+/*
+ * The enclosure and the slip.
+ *
+ * A clerk reads a document and fills in a slip about it; a second person
+ * countersigns the slip against the document. That is exactly the interaction
+ * this screen is, so the card holds both — the facsimile on one side, the
+ * ruled entries on the other, and the two read against each other.
+ *
+ * The one thing here that is new to this application is the ink. Values the
+ * machine typed are set in carbon, the blue-black of a carbon copy; values a
+ * person has touched are set in graphite like every other value in the app.
+ * Provenance becomes something you can see rather than something you have to
+ * remember, which is what the proposal gate exists for: nothing that came off
+ * a model should be able to pass for something somebody wrote down.
+ *
+ * Nothing here is drawn. The lease term rule is the one drawn thing in this
+ * application and it stays that way.
+ */
+
+/* The slip's card ---------------------------------------------------------- */
+
+/* The only card in the application that is not 44rem, and the note on
+   --card-width-plate says why. */
+.card--plate {
+  max-width: var(--card-width-plate);
+}
+
+/* Two panes, side by side above the breakpoint and stacked below it.
+ *
+ * Stacked, the enclosure is first and costs about a hundred and fifty pixels
+ * of scroll: on a phone it collapses to its name and two words, because a PDF
+ * in an iframe on a phone is not a document viewer. That order is also the
+ * reading order — here is the document, and here is what was read off it. */
+.slip {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+@media (min-width: 52rem) {
+  .slip {
+    /* The enclosure takes the slack; the fields have a width below which the
+       label column stops being a column. */
+    grid-template-columns: 1fr minmax(24rem, 26rem);
+  }
+
+  /* Placed rather than reordered, so the facsimile is on the left where a
+     document sits on a desk while the source order keeps the slip first for a
+     reader who is not looking at a screen. */
+  .slip__enclosure {
+    grid-column: 1;
+    grid-row: 1;
+    border-right: var(--rule);
+  }
+
+  .slip__fields {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+/* The enclosure ------------------------------------------------------------ */
+
+.slip__enclosure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-tight);
+  min-width: 0;
+  padding: var(--gap) var(--gap-band);
+  border-bottom: var(--rule);
+}
+
+@media (min-width: 52rem) {
+  .slip__enclosure {
+    border-bottom: none;
+  }
+}
+
+/* One enclosure: its heading, the facsimile, and the way out to a full tab. */
+.slip__encl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-tight);
+  min-width: 0;
+}
+
+.slip__encl-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+}
+
+.slip__encl-name {
+  min-width: 0;
+  font-size: var(--size-small);
+  overflow-wrap: anywhere;
+}
+
+.slip__encl-size {
+  flex: 0 0 auto;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+/* The facsimile sits in a frame the colour of the desk, because that is what
+   is under a document on a desk. It is the one place on a card where the
+   ground shows through, and it reads as a window rather than a panel. */
+.slip__facsimile {
+  width: 100%;
+  height: min(60vh, 34rem);
+  border: var(--rule);
+  border-radius: var(--radius);
+  background: var(--ground-deep);
+}
+
+.slip__facsimile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* On a phone the facsimile is behind a tap. Loading a 3 MB PDF into an iframe
+   the moment the screen opens is a slow screen, and the fields are what the
+   operator came to read. */
+.slip__open {
+  align-self: flex-start;
+}
+
+.slip__encl-note {
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+}
+
+/* The fields --------------------------------------------------------------- */
+
+.slip__fields {
+  min-width: 0;
+  padding-bottom: var(--gap-tight);
+}
+
+.slip__eyebrow {
+  padding: var(--gap) var(--gap-band) 0;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+/* Carbon: what the machine typed.
+ *
+ * One declaration, the discipline the stamp keeps. It is applied to the read
+ * value only — the moment a field becomes an entry the operator is writing in
+ * it, and what they write is theirs. */
+.slip__fields .field__value--carbon {
+  color: var(--carbon);
+}
+
+/* A field the operator has changed goes back to graphite, which is the whole
+   point: the two inks on the card are who said what. */
+.slip__fields .field__value--touched {
+  color: var(--graphite);
+}
+
+/* The property row carries the match's own account of itself, under the value
+   it produced. */
+.slip__match {
+  margin-top: 0.2rem;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+}
+
+/* The foot ----------------------------------------------------------------- */
+
+/* Confidence is a margin mark, not a stamp. The stamp says where a thing
+   stands; this is a property of the reading, and giving it a stamp would make
+   the one bold mark on a card stop meaning one thing. */
+.slip__reading {
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+}
+
+.slip__reading .mono {
+  color: var(--carbon);
+}
+
+/* A reading the record itself doubts. */
+.slip__reading--weak .mono {
+  color: var(--amber);
+}
+
+.slip__provenance {
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+}
+
+/* The register ------------------------------------------------------------- */
+
+/* One line per proposal, the same geometry the mail room's register uses:
+   these are the same kind of object seen at a different stage, and a reader
+   who has learned one row should not have to learn a second. */
+.slip-line + .slip-line {
+  border-top: 1px dashed var(--card-rule);
+}
+
+.slip-line__line {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+  width: 100%;
+
+  min-height: var(--control-min);
+  padding: var(--gap-hair) 0;
+
+  font-family: var(--face-display);
+  font-size: var(--size-body);
+  text-align: left;
+  color: var(--graphite);
+  text-decoration: none;
+}
+
+.slip-line__line:hover {
+  background: var(--ink-wash);
+}
+
+.slip-line__time {
+  flex: 0 0 auto;
+  font-size: var(--size-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-ink);
+}
+
+/* The counterparty and what it is about take the slack. The min-width is
+   load-bearing: without it a long vendor name sets the item's automatic
+   minimum to its own width and pushes the stamp off the card. */
+.slip-line__what {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.slip-line__who {
+  overflow-wrap: anywhere;
+}
+
+.slip-line__about {
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+}
+
+/* The kind, in the margin. Not a stamp: what kind of document this is is a
+   property of it, the way a notice's severity is. */
+.slip-line__kind {
+  flex: 0 0 auto;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  white-space: nowrap;
+}
+
+/* A proposal against no property is the one the operator has to look at, and
+   the line says so where the property name would be. */
+.slip-line__unmatched {
+  color: var(--amber);
+}
+
+.slip-line__encl {
+  flex: 0 0 auto;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+  white-space: nowrap;
+}
+
+/* Insurance and mortgage --------------------------------------------------- */
+
+/* Both are read-only at M4 and both are lists of a few facts, so they reuse
+   the sheet the ledger and the docket sit in rather than bringing a third
+   band of their own. */
+.policy + .policy,
+.loan + .loan {
+  margin-top: var(--gap);
+  padding-top: var(--gap);
+  border-top: var(--rule);
+}
+
+.policy__head,
+.loan__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-tight);
+  flex-wrap: wrap;
+}
+
+.policy__carrier,
+.loan__lender {
+  min-width: 0;
+  font-size: var(--size-lead);
+  overflow-wrap: anywhere;
+}
+
+.policy__type {
+  flex: 0 0 auto;
+  font-size: var(--size-micro);
+  color: var(--muted-ink);
+}
+
+/* The statements under a mortgage are a ledger: dates down the left, figures
+   right-aligned, because a column of figures is read by its last digit. */
+.statements {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  column-gap: var(--gap-tight);
+  row-gap: 0.4rem;
+  margin-top: var(--gap-tight);
+  font-size: var(--size-small);
+}
+
+.statements__row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+
+.statements__date {
+  color: var(--muted-ink);
+  white-space: nowrap;
+}
+
+.statements__balance {
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 40rem) {
+  .slip__enclosure,
+  .slip__eyebrow {
+    padding-left: var(--gap-tight);
+    padding-right: var(--gap-tight);
+  }
+
+  .statements {
+    grid-template-columns: max-content 1fr;
+  }
+
+  /* The paid figure drops to its own line rather than squeezing the date. */
+  .statements__balance {
+    grid-column: 2;
+    text-align: left;
+  }
+}

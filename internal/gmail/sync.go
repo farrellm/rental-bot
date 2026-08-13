@@ -36,11 +36,27 @@ type Syncer struct {
 	log     *slog.Logger
 	now     func() time.Time
 
+	// onFiled is called once per message whose attachments are on disk.
+	//
+	// A callback rather than an ingest client, for the reason
+	// jobs.RunnerOptions.OnDeadLetter is one: this package is a mailbox, not a
+	// reader. It knows a message has landed; whether anything wants to read it
+	// is somebody else's question, and on a host with no model configured the
+	// answer is no.
+	onFiled func(ctx context.Context, messageID int64)
+
 	// running serialises the walk. The poller and a webhook-driven job can
 	// overlap, and one process is the whole of the concurrency here, so a mutex
 	// is the entire answer -- no advisory lock table, no lease.
 	running sync.Mutex
 }
+
+// OnFiled registers what to do with a message once it is fully on disk.
+//
+// It runs inside the sync, after the attachments are stored and before the
+// Gmail label is applied, which is what makes a forwarded receipt reach the
+// review screen in seconds rather than at the next sweep.
+func (s *Syncer) OnFiled(fn func(ctx context.Context, messageID int64)) { s.onFiled = fn }
 
 // NewSyncer wires the pieces a sync needs.
 func NewSyncer(tokens *Store, repo *store.Repo, blobs *blob.Store, archive *Archive, cfg config.Gmail, logger *slog.Logger) *Syncer {
@@ -343,6 +359,12 @@ func (s *Syncer) ingest(ctx context.Context, client *Client, gmailID string, lab
 	if disposition == "received" {
 		if err := s.fileAttachments(ctx, msg, parsed.Attachments); err != nil {
 			return true, disposition, err
+		}
+		// Everything this message is, is now on disk. Whoever wants to read it
+		// gets told; nobody is listening on a host with no model configured,
+		// and the sweep would find it anyway.
+		if s.onFiled != nil {
+			s.onFiled(ctx, msg.ID)
 		}
 	}
 

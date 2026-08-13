@@ -16,14 +16,14 @@ INSERT INTO transactions (
     property_id, occurred_on, amount_cents, category, description,
     counterparty, payment_method, unit_id, lease_id, repair_id,
     vendor_id, document_id, source, confidence, needs_review,
-    created_at, updated_at
+    proposal_id, created_at, updated_at
 ) VALUES (
     ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?,
-    ?, ?
+    ?, ?, ?
 )
-RETURNING id, property_id, occurred_on, amount_cents, category, description, counterparty, payment_method, unit_id, lease_id, repair_id, vendor_id, document_id, source, confidence, needs_review, created_at, updated_at
+RETURNING id, property_id, occurred_on, amount_cents, category, description, counterparty, payment_method, unit_id, lease_id, repair_id, vendor_id, document_id, source, confidence, needs_review, created_at, updated_at, proposal_id
 `
 
 type CreateTransactionParams struct {
@@ -42,10 +42,13 @@ type CreateTransactionParams struct {
 	Source        string
 	Confidence    *float64
 	NeedsReview   int64
+	ProposalID    *int64
 	CreatedAt     string
 	UpdatedAt     string
 }
 
+// proposal_id is set only by the apply path; a manual entry passes NULL. It is
+// the forward half of the provenance the audit log keeps backward.
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error) {
 	row := q.db.QueryRowContext(ctx, createTransaction,
 		arg.PropertyID,
@@ -63,6 +66,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.Source,
 		arg.Confidence,
 		arg.NeedsReview,
+		arg.ProposalID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -86,6 +90,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		&i.NeedsReview,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProposalID,
 	)
 	return i, err
 }
@@ -103,7 +108,7 @@ func (q *Queries) DeleteTransaction(ctx context.Context, id int64) (int64, error
 }
 
 const getTransaction = `-- name: GetTransaction :one
-SELECT id, property_id, occurred_on, amount_cents, category, description, counterparty, payment_method, unit_id, lease_id, repair_id, vendor_id, document_id, source, confidence, needs_review, created_at, updated_at FROM transactions WHERE id = ? LIMIT 1
+SELECT id, property_id, occurred_on, amount_cents, category, description, counterparty, payment_method, unit_id, lease_id, repair_id, vendor_id, document_id, source, confidence, needs_review, created_at, updated_at, proposal_id FROM transactions WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetTransaction(ctx context.Context, id int64) (Transaction, error) {
@@ -128,12 +133,13 @@ func (q *Queries) GetTransaction(ctx context.Context, id int64) (Transaction, er
 		&i.NeedsReview,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProposalID,
 	)
 	return i, err
 }
 
 const listTransactionsAfter = `-- name: ListTransactionsAfter :many
-SELECT id, property_id, occurred_on, amount_cents, category, description, counterparty, payment_method, unit_id, lease_id, repair_id, vendor_id, document_id, source, confidence, needs_review, created_at, updated_at FROM transactions
+SELECT id, property_id, occurred_on, amount_cents, category, description, counterparty, payment_method, unit_id, lease_id, repair_id, vendor_id, document_id, source, confidence, needs_review, created_at, updated_at, proposal_id FROM transactions
 WHERE property_id = ?1
   AND (CAST(?2 AS TEXT) IS NULL
        OR occurred_on >= CAST(?2 AS TEXT))
@@ -193,6 +199,7 @@ func (q *Queries) ListTransactionsAfter(ctx context.Context, arg ListTransaction
 			&i.NeedsReview,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ProposalID,
 		); err != nil {
 			return nil, err
 		}
@@ -209,7 +216,7 @@ func (q *Queries) ListTransactionsAfter(ctx context.Context, arg ListTransaction
 
 const listTransactionsFirstPage = `-- name: ListTransactionsFirstPage :many
 
-SELECT id, property_id, occurred_on, amount_cents, category, description, counterparty, payment_method, unit_id, lease_id, repair_id, vendor_id, document_id, source, confidence, needs_review, created_at, updated_at FROM transactions
+SELECT id, property_id, occurred_on, amount_cents, category, description, counterparty, payment_method, unit_id, lease_id, repair_id, vendor_id, document_id, source, confidence, needs_review, created_at, updated_at, proposal_id FROM transactions
 WHERE property_id = ?1
   AND (CAST(?2 AS TEXT) IS NULL
        OR occurred_on >= CAST(?2 AS TEXT))
@@ -276,6 +283,7 @@ func (q *Queries) ListTransactionsFirstPage(ctx context.Context, arg ListTransac
 			&i.NeedsReview,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ProposalID,
 		); err != nil {
 			return nil, err
 		}
@@ -356,7 +364,7 @@ UPDATE transactions SET
     needs_review   = ?,
     updated_at     = ?
 WHERE id = ?
-RETURNING id, property_id, occurred_on, amount_cents, category, description, counterparty, payment_method, unit_id, lease_id, repair_id, vendor_id, document_id, source, confidence, needs_review, created_at, updated_at
+RETURNING id, property_id, occurred_on, amount_cents, category, description, counterparty, payment_method, unit_id, lease_id, repair_id, vendor_id, document_id, source, confidence, needs_review, created_at, updated_at, proposal_id
 `
 
 type UpdateTransactionParams struct {
@@ -414,6 +422,7 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		&i.NeedsReview,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProposalID,
 	)
 	return i, err
 }

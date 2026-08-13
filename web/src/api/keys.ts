@@ -53,4 +53,17 @@ export const keys = {
   // doing anything.
   channel: ["channel"] as const,
   notices: ["channel", "notices"] as const,
+
+  // The review queue. The status is part of the key, because the register and
+  // the "what was decided" view are different pages of different rows;
+  // allReview is what a settlement invalidates, since a proposal leaving
+  // pending changes both.
+  allReview: ["review"] as const,
+  review: (status: string) => ["review", status] as const,
+  proposal: (id: number) => ["review", "proposal", id] as const,
+
+  // What an applied proposal wrote. Per-property, under the property's key,
+  // like every other collection that hangs off one.
+  insurance: (id: number) => ["properties", id, "insurance"] as const,
+  mortgages: (id: number) => ["properties", id, "mortgage"] as const,
 };

@@ -30,6 +30,7 @@ type Config struct {
 	Database Database `toml:"database"`
 	Storage  Storage  `toml:"storage"`
 	Gmail    Gmail    `toml:"gmail"`
+	LLM      LLM      `toml:"llm"`
 	Telegram Telegram `toml:"telegram"`
 	Jobs     Jobs     `toml:"jobs"`
 	Log      Log      `toml:"log"`
@@ -122,6 +123,53 @@ type PubSub struct {
 // Enabled reports whether email ingestion is configured at all.
 func (g Gmail) Enabled() bool { return g.ClientID != "" }
 
+// LLM configures the reading half of ingestion (docs/DESIGN.md §5).
+//
+// A blank Provider disables all of it: no classify handler, no extract
+// handler, no sweep, and forwarded mail that is still archived and still filed
+// but never read. That is the state a fresh clone is in and it has to be a
+// working one — the same reason a blank gmail.client_id is the off switch
+// there.
+//
+// The provider name is in the file and the API key is in the environment, the
+// split every other subsystem here uses.
+type LLM struct {
+	// Provider is anthropic, openai or google.
+	Provider string `toml:"provider"`
+	// Model is the provider's own model id.
+	Model string `toml:"model"`
+	// Timeout bounds one call. A scanned lease is a slow read, and the job
+	// queue's own retry is what covers a call that does not come back.
+	Timeout Duration `toml:"timeout"`
+	// MaxRetries is how many times the SDK retries a 429 or a 5xx before
+	// handing the error back. The job queue retries on top of this, so it is
+	// deliberately small.
+	MaxRetries int `toml:"max_retries"`
+	// MaxAttachmentBytes is the largest enclosure that will be sent to a model.
+	// Below gmail.max_attachment_bytes on purpose: the bytes are worth keeping
+	// at a size that is not worth reading.
+	MaxAttachmentBytes int64 `toml:"max_attachment_bytes"`
+	// MonthlyTokenBudget trips a breaker and raises a critical alert rather
+	// than quietly running up a bill (§5.3). Zero turns the cap off.
+	MonthlyTokenBudget int64 `toml:"monthly_token_budget"`
+	// AutoApply allows §5.4's one exception to the review gate. Turning it off
+	// sends every proposal to a person, which is the conservative setting and
+	// not the default one — a receipt that clears all three conditions is the
+	// case the whole pipeline was built to make effortless.
+	AutoApply bool `toml:"auto_apply"`
+	// AutoApplyConfidence is the second of §5.4's three conditions. The design
+	// names 0.90 and there is no reason to go lower; going higher is a matter
+	// of taste.
+	AutoApplyConfidence float64 `toml:"auto_apply_confidence"`
+	// SweepInterval is how often messages that arrived but were never read are
+	// looked for. This is to the direct enqueue what the Gmail poller is to the
+	// webhook: the enqueue makes it fast, this makes it reliable.
+	SweepInterval Duration `toml:"sweep_interval"`
+}
+
+// Enabled reports whether the reading half of ingestion is configured at all.
+func (l LLM) Enabled() bool { return l.Provider != "" }
+
 // Telegram configures the alert channel (docs/DESIGN.md §8).
 //
 // An empty BotUsername disables the whole subsystem: no sender, no pairing
@@ -198,6 +246,11 @@ type Secrets struct {
 	Key []byte
 	// GmailClientSecret pairs with Gmail.ClientID.
 	GmailClientSecret string
+	// LLMAPIKey pairs with LLM.Provider. The SDK would resolve a provider's
+	// own environment variable on its own; this process reads its secrets in
+	// one place instead, so a key that arrives by a second route cannot be a
+	// key nothing validates at startup.
+	LLMAPIKey string
 	// TelegramBotToken pairs with Telegram.BotUsername.
 	//
 	// §9.2 lists the bot token under field encryption, alongside the Gmail
@@ -260,6 +313,28 @@ func Default() Config {
 			// days of failures before anything is actually lost.
 			WatchRenewInterval: Duration{24 * time.Hour},
 			MaxAttachmentBytes: 25 << 20, // 25 MiB, matching one upload
+		},
+		LLM: LLM{
+			// The provider is blank, which is the off switch. Everything below
+			// it is what the subsystem uses once somebody names one.
+			Model: "claude-sonnet-5",
+			// A scanned twelve-page lease is a slow read, and the queue's own
+			// retry covers a call that never comes back.
+			Timeout:    Duration{90 * time.Second},
+			MaxRetries: 2,
+			// Under gmail.max_attachment_bytes: bytes worth keeping are not
+			// always bytes worth reading, and a 25 MiB scan costs more to send
+			// than the record it produces is worth.
+			MaxAttachmentBytes: 10 << 20, // 10 MiB
+			// About twenty dollars a month at current rates, which is far more
+			// than a small portfolio's forwarded mail costs to read. It is a
+			// runaway-bill breaker, not a spending target.
+			MonthlyTokenBudget:  2_000_000,
+			AutoApply:           true,
+			AutoApplyConfidence: 0.90, // §5.4's figure
+			// Fifteen minutes: longer than the Gmail poll, because this only
+			// catches what the enqueue at sync time already missed.
+			SweepInterval: Duration{15 * time.Minute},
 		},
 		Telegram: Telegram{
 			// Six hours is §8.3's figure. Long enough that a condition nobody
@@ -357,6 +432,16 @@ func (c *Config) overlayEnv() error {
 	env.str("GMAIL_PUBSUB_AUDIENCE", &c.Gmail.PubSub.Audience)
 	env.str("GMAIL_PUBSUB_SERVICE_ACCOUNT", &c.Gmail.PubSub.ServiceAccount)
 
+	env.str("LLM_PROVIDER", &c.LLM.Provider)
+	env.str("LLM_MODEL", &c.LLM.Model)
+	env.duration("LLM_TIMEOUT", &c.LLM.Timeout)
+	env.integer("LLM_MAX_RETRIES", &c.LLM.MaxRetries)
+	env.bytes("LLM_MAX_ATTACHMENT_BYTES", &c.LLM.MaxAttachmentBytes)
+	env.count("LLM_MONTHLY_TOKEN_BUDGET", &c.LLM.MonthlyTokenBudget)
+	env.boolean("LLM_AUTO_APPLY", &c.LLM.AutoApply)
+	env.fraction("LLM_AUTO_APPLY_CONFIDENCE", &c.LLM.AutoApplyConfidence)
+	env.duration("LLM_SWEEP_INTERVAL", &c.LLM.SweepInterval)
+
 	env.str("TELEGRAM_BOT_USERNAME", &c.Telegram.BotUsername)
 	env.duration("TELEGRAM_COOLDOWN", &c.Telegram.Cooldown)
 	env.duration("TELEGRAM_CRITICAL_COOLDOWN", &c.Telegram.CriticalCooldown)
@@ -383,6 +468,7 @@ func (c *Config) overlayEnv() error {
 func (c *Config) loadSecrets() error {
 	var env envLoader
 	env.str("GMAIL_CLIENT_SECRET", &c.Secrets.GmailClientSecret)
+	env.str("LLM_API_KEY", &c.Secrets.LLMAPIKey)
 	env.str("TELEGRAM_BOT_TOKEN", &c.Secrets.TelegramBotToken)
 
 	if v, ok := os.LookupEnv(envPrefix + "SECRET_KEY"); ok && v != "" {
@@ -439,7 +525,60 @@ func (c Config) Validate() error {
 	if err := c.validateGmail(); err != nil {
 		return err
 	}
+	if err := c.validateLLM(); err != nil {
+		return err
+	}
 	return c.validateTelegram()
+}
+
+// validateLLM checks the reading settings, and only when there are any.
+//
+// A blank llm.provider is the off switch, the same way a blank
+// gmail.client_id is. Name one, though, and everything it needs has to be
+// there: half-configured reading fails at the first forwarded receipt, which
+// is days later and looks like a pipeline that silently stopped.
+func (c Config) validateLLM() error {
+	if !c.LLM.Enabled() {
+		return nil
+	}
+	switch c.LLM.Provider {
+	case "anthropic", "openai", "google":
+	default:
+		return fmt.Errorf("llm.provider is %q; it must be anthropic, openai or google", c.LLM.Provider)
+	}
+	if c.Secrets.LLMAPIKey == "" {
+		return errors.New("llm.provider is set but RENTAL_BOT_LLM_API_KEY is empty")
+	}
+	if c.LLM.Model == "" {
+		return errors.New("llm.provider is set but llm.model is empty")
+	}
+	// Reading forwarded mail without a mailbox to read it from is a subsystem
+	// with nothing to do. Saying so at startup beats an empty review queue
+	// nobody can explain.
+	if !c.Gmail.Enabled() {
+		return errors.New("llm.provider is set but gmail.client_id is empty; there is no mail to read")
+	}
+	if c.LLM.Timeout.Duration < time.Second {
+		return fmt.Errorf("llm.timeout is %s; it must be at least 1s", c.LLM.Timeout)
+	}
+	if c.LLM.MaxRetries < 0 {
+		return fmt.Errorf("llm.max_retries is %d; it must not be negative", c.LLM.MaxRetries)
+	}
+	if c.LLM.MaxAttachmentBytes < 1 {
+		return fmt.Errorf("llm.max_attachment_bytes is %d; it must be at least 1", c.LLM.MaxAttachmentBytes)
+	}
+	if c.LLM.MonthlyTokenBudget < 0 {
+		return fmt.Errorf("llm.monthly_token_budget is %d; it must not be negative, and 0 turns the cap off", c.LLM.MonthlyTokenBudget)
+	}
+	// A confidence threshold outside 0..1 compares against a number the model
+	// cannot produce, which either applies everything or applies nothing.
+	if c.LLM.AutoApplyConfidence < 0 || c.LLM.AutoApplyConfidence > 1 {
+		return fmt.Errorf("llm.auto_apply_confidence is %v; it must be between 0 and 1", c.LLM.AutoApplyConfidence)
+	}
+	if c.LLM.SweepInterval.Duration < time.Minute {
+		return fmt.Errorf("llm.sweep_interval is %s; it must be at least 1m", c.LLM.SweepInterval)
+	}
+	return nil
 }
 
 // validateGmail checks the ingestion settings, and only when there are any.
@@ -639,7 +778,11 @@ func (e *envLoader) integer(suffix string, dst *int) {
 
 // bytes reads a size in bytes. It is separate from integer only because the
 // fields it writes are int64.
-func (e *envLoader) bytes(suffix string, dst *int64) {
+func (e *envLoader) bytes(suffix string, dst *int64) { e.count(suffix, dst) }
+
+// count reads any int64 quantity. bytes is the same reader under the name the
+// size fields read better with.
+func (e *envLoader) count(suffix string, dst *int64) {
 	v, ok := os.LookupEnv(envPrefix + suffix)
 	if !ok {
 		return
@@ -650,6 +793,37 @@ func (e *envLoader) bytes(suffix string, dst *int64) {
 		return
 	}
 	*dst = n
+}
+
+// boolean reads a switch. strconv's spellings are accepted -- true, false, 1,
+// 0, yes and no are not all of them, but every one of them is unambiguous.
+func (e *envLoader) boolean(suffix string, dst *bool) {
+	v, ok := os.LookupEnv(envPrefix + suffix)
+	if !ok {
+		return
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		e.errs = append(e.errs, fmt.Errorf("%s%s is %q; it must be true or false", envPrefix, suffix, v))
+		return
+	}
+	*dst = b
+}
+
+// fraction reads a number between zero and one. The range is checked here
+// rather than in Validate, because "0.90" and "90" are both things somebody
+// will type and only one of them means what they meant.
+func (e *envLoader) fraction(suffix string, dst *float64) {
+	v, ok := os.LookupEnv(envPrefix + suffix)
+	if !ok {
+		return
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil || f < 0 || f > 1 {
+		e.errs = append(e.errs, fmt.Errorf("%s%s is %q; it must be a number between 0 and 1", envPrefix, suffix, v))
+		return
+	}
+	*dst = f
 }
 
 func (e *envLoader) duration(suffix string, dst *Duration) {

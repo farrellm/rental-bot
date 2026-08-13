@@ -366,6 +366,127 @@ func TestTelegramRejectsHalfAConfiguration(t *testing.T) {
 	}
 }
 
+func TestLLMIsOffWhenUnconfigured(t *testing.T) {
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.LLM.Enabled() {
+		t.Error("LLM.Enabled() is true with no provider")
+	}
+}
+
+func TestLLMReadsFileAndEnv(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	write(t, path, `
+[gmail]
+client_id = "1234.apps.googleusercontent.com"
+topic = "projects/rental/topics/gmail"
+allowed_senders = ["me@example.com"]
+
+[gmail.pubsub]
+audience = "https://rental.example.com/webhooks/gmail"
+service_account = "push@rental.iam.gserviceaccount.com"
+
+[llm]
+provider = "anthropic"
+monthly_token_budget = 500000
+auto_apply = false
+`)
+
+	t.Setenv(envPrefix+"GMAIL_CLIENT_SECRET", "shh")
+	t.Setenv(envPrefix+"SECRET_KEY", "an-encryption-key")
+	t.Setenv(envPrefix+"LLM_API_KEY", "sk-test")
+	t.Setenv(envPrefix+"LLM_AUTO_APPLY_CONFIDENCE", "0.98")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if !cfg.LLM.Enabled() {
+		t.Fatal("LLM.Enabled() is false with a provider set")
+	}
+	if got, want := cfg.LLM.Model, Default().LLM.Model; got != want {
+		t.Errorf("Model = %q, want the default %q", got, want)
+	}
+	if got, want := cfg.LLM.MonthlyTokenBudget, int64(500000); got != want {
+		t.Errorf("MonthlyTokenBudget = %d, want %d (from the file)", got, want)
+	}
+	if cfg.LLM.AutoApply {
+		t.Error("AutoApply is true, want the file's false")
+	}
+	if got, want := cfg.LLM.AutoApplyConfidence, 0.98; got != want {
+		t.Errorf("AutoApplyConfidence = %v, want %v (env wins over the default)", got, want)
+	}
+	if cfg.Secrets.LLMAPIKey != "sk-test" {
+		t.Errorf("LLMAPIKey = %q, want it from the environment", cfg.Secrets.LLMAPIKey)
+	}
+}
+
+// Half-configured reading has to fail at startup. The first forwarded receipt
+// is days later, and a review queue that stays empty looks like a pipeline
+// that silently stopped rather than one that was never finished.
+func TestLLMRejectsHalfAConfiguration(t *testing.T) {
+	// Everything a working ingestion setup needs, so each case below fails for
+	// its own reason rather than for a missing mailbox.
+	mailbox := map[string]string{
+		"GMAIL_CLIENT_ID":              "1234.apps.googleusercontent.com",
+		"GMAIL_CLIENT_SECRET":          "s",
+		"GMAIL_TOPIC":                  "projects/p/topics/t",
+		"GMAIL_ALLOWED_SENDERS":        "me@example.com",
+		"GMAIL_PUBSUB_AUDIENCE":        "https://rental.example.com/webhooks/gmail",
+		"GMAIL_PUBSUB_SERVICE_ACCOUNT": "push@rental.iam.gserviceaccount.com",
+		"SECRET_KEY":                   "k",
+	}
+
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{"no api key", map[string]string{"LLM_PROVIDER": "anthropic"}},
+		{"a provider this build cannot construct", map[string]string{
+			"LLM_PROVIDER": "hal9000", "LLM_API_KEY": "k",
+		}},
+		{"no model", map[string]string{
+			"LLM_PROVIDER": "anthropic", "LLM_API_KEY": "k", "LLM_MODEL": "",
+		}},
+		{"a confidence threshold no model can reach", map[string]string{
+			"LLM_PROVIDER": "anthropic", "LLM_API_KEY": "k",
+			"LLM_AUTO_APPLY_CONFIDENCE": "90",
+		}},
+		{"a negative budget", map[string]string{
+			"LLM_PROVIDER": "anthropic", "LLM_API_KEY": "k",
+			"LLM_MONTHLY_TOKEN_BUDGET": "-1",
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range mailbox {
+				t.Setenv(envPrefix+k, v)
+			}
+			for k, v := range tt.env {
+				t.Setenv(envPrefix+k, v)
+			}
+			if _, err := Load(""); err == nil {
+				t.Fatal("Load succeeded, want an error")
+			}
+		})
+	}
+}
+
+// Reading mail nobody collects is a subsystem with no input. Saying so at
+// startup beats an empty review queue nobody can explain.
+func TestLLMNeedsAMailbox(t *testing.T) {
+	t.Setenv(envPrefix+"LLM_PROVIDER", "anthropic")
+	t.Setenv(envPrefix+"LLM_API_KEY", "k")
+
+	if _, err := Load(""); err == nil {
+		t.Fatal("Load succeeded with a model and no mailbox, want an error")
+	}
+}
+
 func write(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {

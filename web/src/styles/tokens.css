@@ -21,6 +21,11 @@
   /* Ink */
   --graphite: #22312f; /* body ink, all values */
   --muted-ink: #566260; /* field labels, secondary entries */
+  /* Carbon copy: what a machine typed, not a person. The review slip is the
+     only screen that uses it, and it uses it to say which figures nobody has
+     vouched for yet — the moment the operator touches a field it goes
+     graphite. Checked against --card at 4.5:1, because it carries meaning. */
+  --carbon: #3a4a72;
 
   /* State — a word always accompanies the colour; colour is never alone */
   --verdigris: #1f5f52; /* operational */
@@ -55,6 +60,13 @@
   --gap-band: 1.5rem;
   --card-width: 44rem;
   --card-width-slip: 24rem; /* the sign-in slip, narrower than a full record */
+  /* The proposal slip, and nothing else. Every card in this application is
+     44rem wide and a folder does not change size; this one holds two things at
+     once — the enclosure and the slip read against it — and reading one
+     against the other is the whole job of the screen. At 44rem the facsimile
+     is too small to check a figure against, which would make the card honest
+     about its width and useless at its purpose. */
+  --card-width-plate: 62rem;
   --index-min: 18rem; /* narrowest an index card gets before the grid reflows */
 
   /* Nothing you touch is smaller than this, at any width. */

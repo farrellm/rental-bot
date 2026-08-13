@@ -110,6 +110,16 @@ func (s *server) routeProperties(mux *http.ServeMux) {
 		http.MethodPatch:  s.guarded(s.handleUpdateUnit),
 		http.MethodDelete: s.guarded(s.handleDeleteUnit),
 	})
+	// Read-only, and §7.1's table already names both. An applied insurance or
+	// mortgage proposal writes a row, and without these nothing can show it;
+	// creating and amending one by hand arrives with the milestone that needs
+	// it. The handlers live in review.go, beside the pipeline that writes them.
+	route(mux, "/api/v1/properties/{id}/insurance", methods{
+		http.MethodGet: s.guarded(s.handleListInsurance),
+	})
+	route(mux, "/api/v1/properties/{id}/mortgage", methods{
+		http.MethodGet: s.guarded(s.handleListMortgages),
+	})
 }
 
 func (s *server) handleListProperties(w http.ResponseWriter, r *http.Request) {
