@@ -212,11 +212,28 @@
   padding: 0 0 var(--gap-hair);
 }
 
-/* A narrower label column than the slip's own. Three rows have to fit a 24rem
-   pane that has already given up a rule and its indent, and "City / State /
-   ZIP" is the longest label either side of it. */
+/* The leaf's rows stack their label over their entry, at every width.
+ *
+ * This is the geometry a card already uses on a phone, applied here for the
+ * same reason: there is not enough width for two columns. The fields pane is
+ * 24rem, the leaf gives up a rule and an indent inside it, and a 10rem label
+ * column would leave a street address reading "9 Sycamore L". A record card is
+ * worth nothing if you cannot see what you are about to file. */
 .slip__new .field {
-  grid-template-columns: 8rem 1fr;
+  grid-template-columns: 1fr;
+  gap: 0.125rem;
+}
+
+/* Deterministic rather than wrap-dependent: the town takes a line and the
+   state and the ZIP share the next, which is how the two of them are printed
+   on an envelope anyway. */
+.slip__new .entry-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.slip__new .entry-group > :first-child {
+  grid-column: 1 / -1;
 }
 
 .slip__new-foot {
@@ -403,13 +420,6 @@
   .slip__new {
     margin-left: var(--gap-tight);
     margin-right: var(--gap-tight);
-  }
-
-  /* The leaf's own label column is more specific than the rule that stacks a
-     field on a phone, so it has to stack itself or it would hold two columns
-     on a 320px screen where nothing else does. */
-  .slip__new .field {
-    grid-template-columns: 1fr;
   }
 
   .statements {

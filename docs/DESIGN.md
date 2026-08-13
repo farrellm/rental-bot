@@ -300,6 +300,18 @@ word. The apply is one transaction — entity, audit row, document link,
 settlement, message standing — so an effect without its record is not a state
 the database can reach.
 
+A proposal matched to nothing cannot be filed at all, and the refusal is right —
+the matcher never guesses. But the address is already on the screen, and the
+first document about a building is exactly when that building should join the
+portfolio, so the slip offers the record it could not find, prefilled from what
+the document said. The suggestion appears only when the matcher's verdict is
+`unmatched`: `ambiguous` means two properties fit, and the answer there is to
+pick one rather than to grow a third. Opening the record is one transaction —
+the property, its implicit unit, and the proposal's retarget — because a
+property created with the proposal still unmatched is the state the operator
+was already in. No `audit_log` row: every field is read off the slip and
+confirmed before the press, which makes it hand entry with a head start.
+
 This gate is the design's single most important safety property. A misextracted receipt that silently enters the ledger is the most likely real-world bug in this system, and the one that damages trust in every number the dashboard shows.
 
 ---
