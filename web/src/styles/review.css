@@ -171,6 +171,61 @@
   overflow-wrap: anywhere;
 }
 
+/* The record that is not on file ------------------------------------------- */
+
+/* An unmatched proposal cannot be filed at all, so the row that blocks it is
+   an invitation rather than a verdict. The sentence names what is missing and
+   the button names the move; both sit under the picker, because picking is
+   still the right answer when the building is already on file. */
+.slip__suggest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-tight);
+  padding: 0 var(--gap-band) var(--gap-tight);
+}
+
+.slip__suggest-line {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-size: var(--size-small);
+  color: var(--muted-ink);
+  overflow-wrap: anywhere;
+}
+
+/* The draft itself: a leaf clipped to the slip, not a second card and not a
+   dialog. The rule down its left is what makes it read as subordinate to the
+   Property row it hangs off, and it is the card's own rule rather than a new
+   colour — the ink in here is doing the talking.
+
+   Nothing about it is drawn or animated. It appears where it belongs and the
+   fields underneath move down, which is what a sheet clipped to a slip does. */
+.slip__new {
+  margin: 0 var(--gap-band) var(--gap-tight);
+  padding-left: var(--gap-tight);
+  border-left: 2px solid var(--card-rule);
+}
+
+/* The eyebrow inside the leaf has already been indented by the leaf, so it
+   drops the padding it carries at the top of the fields pane. */
+.slip__new .slip__eyebrow {
+  padding: 0 0 var(--gap-hair);
+}
+
+/* A narrower label column than the slip's own. Three rows have to fit a 24rem
+   pane that has already given up a rule and its indent, and "City / State /
+   ZIP" is the longest label either side of it. */
+.slip__new .field {
+  grid-template-columns: 8rem 1fr;
+}
+
+.slip__new-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-tight);
+  margin-top: var(--gap-tight);
+}
+
 /* The foot ----------------------------------------------------------------- */
 
 /* Confidence is a margin mark, not a stamp. The stamp says where a thing
@@ -339,9 +394,22 @@
 
 @media (max-width: 40rem) {
   .slip__enclosure,
-  .slip__eyebrow {
+  .slip__eyebrow,
+  .slip__suggest {
     padding-left: var(--gap-tight);
     padding-right: var(--gap-tight);
+  }
+
+  .slip__new {
+    margin-left: var(--gap-tight);
+    margin-right: var(--gap-tight);
+  }
+
+  /* The leaf's own label column is more specific than the rule that stacks a
+     field on a phone, so it has to stack itself or it would hold two columns
+     on a 320px screen where nothing else does. */
+  .slip__new .field {
+    grid-template-columns: 1fr;
   }
 
   .statements {

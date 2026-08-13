@@ -4,14 +4,18 @@ import { Link, useNavigate, useParams } from "react-router";
 import {
   describeError,
   useApproveProposal,
+  useCreatePropertyForProposal,
   useProposal,
   useRejectProposal,
   useUpdateProposal,
   type ProposalDetail,
   type ProposalEnclosure,
   type ProposalKind,
+  type ProposalPropertyWrite,
+  type PropertySuggestion,
 } from "../api";
 import { AmendableRow, FieldRow } from "../components/FieldRow";
+import { entryClass } from "./property/entryClass";
 import { Stamp, type StampState } from "../components/Stamp";
 import {
   bytes,
@@ -419,38 +423,231 @@ function PropertyRow({
   );
 
   return (
-    <AmendableRow
-      label="Property"
-      editing={editing}
-      htmlFor="slip-property"
-      block
-      value={
-        <>
-          <span className={unmatched ? "field__value--fault" : inkClass(false)}>
-            {named?.nickname ?? "no property matched"}
-          </span>
-          {note}
-        </>
-      }
-    >
-      {/* An unmatched proposal is the one thing on this slip the operator has
-          to fix before it can be filed, so the rule under it says so — the
-          same red rule an invalid entry wears anywhere else in the app. */}
-      <select
-        id="slip-property"
-        className={unmatched ? "entry entry--invalid" : "entry"}
-        value={property ?? ""}
-        onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+    <>
+      <AmendableRow
+        label="Property"
+        editing={editing}
+        htmlFor="slip-property"
+        block
+        value={
+          <>
+            <span className={unmatched ? "field__value--fault" : inkClass(false)}>
+              {named?.nickname ?? "no property matched"}
+            </span>
+            {note}
+          </>
+        }
       >
-        <option value="">no property matched</option>
-        {data.properties.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.nickname} — {p.address}
-          </option>
-        ))}
-      </select>
-      {note}
-    </AmendableRow>
+        {/* An unmatched proposal is the one thing on this slip the operator has
+            to fix before it can be filed, so the rule under it says so — the
+            same red rule an invalid entry wears anywhere else in the app. */}
+        <select
+          id="slip-property"
+          className={unmatched ? "entry entry--invalid" : "entry"}
+          value={property ?? ""}
+          onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+        >
+          <option value="">no property matched</option>
+          {data.properties.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nickname} — {p.address}
+            </option>
+          ))}
+        </select>
+        {note}
+      </AmendableRow>
+
+      {/* The picker cannot fix a building nobody has entered. The server sends
+          a suggestion only when the document named an address and no property
+          folds to it, so its presence is the whole condition. */}
+      {editing && data.property_suggestion && (
+        <NewRecord proposalId={data.id} suggestion={data.property_suggestion} onOpened={onChange} />
+      )}
+    </>
+  );
+}
+
+/** The five fields a document can fill in, as an entry holds them. */
+type RecordDraft = ProposalPropertyWrite;
+
+function seedRecord(s: PropertySuggestion): RecordDraft {
+  return {
+    nickname: s.nickname,
+    address_line1: s.address_line1,
+    city: s.city,
+    state: s.state,
+    postal_code: s.postal_code,
+  };
+}
+
+/**
+ * A record card the matcher could not find, clipped to the slip.
+ *
+ * The same ink rule as everything else here, extended to a record that does
+ * not exist yet: what the document said is carbon, and the moment the operator
+ * changes a field — or fills in one the document left blank — it is theirs and
+ * goes graphite. A building enters the portfolio with its provenance visible.
+ *
+ * It is a leaf rather than a second card or a dialog. The operator is reading
+ * a document against a slip, and sending them to another screen to retype an
+ * address that is on the one they are looking at is the problem this solves.
+ */
+function NewRecord({
+  proposalId,
+  suggestion,
+  onOpened,
+}: {
+  proposalId: number;
+  suggestion: PropertySuggestion;
+  onOpened: (id: number | null) => void;
+}) {
+  const [drafting, setDrafting] = useState(false);
+  const [draft, setDraft] = useState<RecordDraft>(() => seedRecord(suggestion));
+  const [problems, setProblems] = useState<Record<string, string>>({});
+  const [fault, setFault] = useState<string | null>(null);
+  const create = useCreatePropertyForProposal(proposalId);
+
+  function set(key: keyof RecordDraft, value: string) {
+    setDraft((current) => ({ ...current, [key]: value }));
+    setFault(null);
+    setProblems((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }
+
+  function ink(key: keyof RecordDraft): string {
+    return inkClass(draft[key] !== suggestion[key]);
+  }
+
+  function abandon() {
+    setDraft(seedRecord(suggestion));
+    setProblems({});
+    setFault(null);
+    setDrafting(false);
+  }
+
+  async function createRecord() {
+    // The server applies these rules too; catching them here is what puts the
+    // complaint on the line it is about rather than in a banner at the top.
+    const found: Record<string, string> = {};
+    if (!draft.nickname.trim()) found.nickname = "Name the property.";
+    if (!draft.address_line1.trim()) found.address_line1 = "Write the street address.";
+    setProblems(found);
+    if (Object.keys(found).length > 0) return;
+
+    try {
+      const attached = await create.mutateAsync(draft);
+      // The refetch will carry the same id, but the picker is local state and
+      // would otherwise still read empty under a row that now has a property.
+      onOpened(attached.property_id);
+      setDrafting(false);
+    } catch (err) {
+      setFault(describeError(err));
+    }
+  }
+
+  if (!drafting) {
+    return (
+      <div className="slip__suggest">
+        <p className="slip__suggest-line">
+          <span className="mono">{suggestion.source}</span> is not on file.
+        </p>
+        <button type="button" className="button" onClick={() => setDrafting(true)}>
+          Open a new record
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="slip__new">
+      <p className="slip__eyebrow stamped">New record</p>
+
+      <dl className="card__fields">
+        <AmendableRow
+          label="Nickname"
+          editing
+          value={null}
+          htmlFor="new-nickname"
+          hint={problems.nickname}
+        >
+          <input
+            id="new-nickname"
+            className={`${entryClass(problems.nickname)} ${ink("nickname")}`}
+            value={draft.nickname}
+            onChange={(e) => set("nickname", e.target.value)}
+            autoComplete="off"
+          />
+        </AmendableRow>
+
+        <AmendableRow
+          label="Address"
+          editing
+          value={null}
+          htmlFor="new-address"
+          hint={problems.address_line1}
+        >
+          <input
+            id="new-address"
+            className={`${entryClass(problems.address_line1)} ${ink("address_line1")}`}
+            value={draft.address_line1}
+            onChange={(e) => set("address_line1", e.target.value)}
+            autoComplete="off"
+          />
+        </AmendableRow>
+
+        <AmendableRow label="City / State / ZIP" editing value={null} htmlFor="new-city" block>
+          <div className="entry-group">
+            <input
+              id="new-city"
+              className={`entry ${ink("city")}`}
+              value={draft.city}
+              onChange={(e) => set("city", e.target.value)}
+              aria-label="City"
+              placeholder="City"
+              autoComplete="off"
+            />
+            <input
+              className={`entry ${ink("state")}`}
+              value={draft.state}
+              onChange={(e) => set("state", e.target.value)}
+              aria-label="State"
+              placeholder="State"
+              autoComplete="off"
+            />
+            <input
+              className={`entry ${ink("postal_code")}`}
+              value={draft.postal_code}
+              onChange={(e) => set("postal_code", e.target.value)}
+              aria-label="Postal code"
+              placeholder="ZIP"
+              inputMode="numeric"
+              autoComplete="off"
+            />
+          </div>
+        </AmendableRow>
+      </dl>
+
+      <p className="hint">It starts with one unit called Main. Fill in the rest on the record.</p>
+      {fault && <p className="hint hint--fault">{fault}</p>}
+
+      <div className="slip__new-foot">
+        <button
+          type="button"
+          className="button"
+          disabled={create.isPending}
+          onClick={() => void createRecord()}
+        >
+          {create.isPending ? "Creating…" : "Create property"}
+        </button>
+        <button type="button" className="button" disabled={create.isPending} onClick={abandon}>
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 

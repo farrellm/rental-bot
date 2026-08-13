@@ -596,6 +596,23 @@ export interface ProposalPropertyName {
   address: string;
 }
 
+/**
+ * A record the matcher could not find, typed up from what the document said.
+ *
+ * The address fields and a nickname, and no more: everything a document says
+ * about a building is where it is. What it cost and how many bedrooms it has
+ * are not on a roofing invoice, and are filled in on the record afterwards.
+ */
+export interface PropertySuggestion {
+  nickname: string;
+  address_line1: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  /** The address string this was read off, verbatim. */
+  source: string;
+}
+
 export interface ProposalDetail extends Proposal {
   subject: string;
   from_addr: string;
@@ -604,6 +621,17 @@ export interface ProposalDetail extends Proposal {
   enclosures: ProposalEnclosure[];
   property: Property | null;
   properties: ProposalPropertyName[];
+  /** Null unless this is pending and named an address nothing on file folds to. */
+  property_suggestion: PropertySuggestion | null;
+}
+
+/** A new record, opened off the slip that needed it. */
+export interface ProposalPropertyWrite {
+  nickname: string;
+  address_line1: string;
+  city: string;
+  state: string;
+  postal_code: string;
 }
 
 export interface ProposalPage {
